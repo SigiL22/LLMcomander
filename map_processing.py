@@ -292,8 +292,6 @@ def draw_names(image, db_path, type_settings, origin, scale=1.0, crop_offset=Non
             else:
                 try:
                     font = ImageFont.truetype(font_path, settings["font_size"])
-                    if log_func:
-                        log_func(f"Шрифт загружен для '{name}': size={settings['font_size']}, path={font_path}")
                 except Exception as e:
                     if log_func:
                         log_func(f"Ошибка загрузки шрифта '{font_path}': {e}, использую шрифт по умолчанию")

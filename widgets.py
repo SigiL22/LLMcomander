@@ -1,16 +1,17 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTabWidget, QFileDialog,
     QTextEdit, QFormLayout, QSpinBox, QLineEdit, QGraphicsScene, QGraphicsView,
-    QComboBox, QColorDialog, QGroupBox, QGridLayout, QFontDialog
+    QComboBox, QColorDialog, QGroupBox, QGridLayout, QFontDialog, QGraphicsTextItem, QGraphicsItemGroup
 )
 from PyQt5.QtGui import QPixmap, QImage, QColor, QFont
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PIL import Image
 import json
 import os
 from utils import pil_image_to_qpixmap, find_font_path
 from map_processing import resize_image, draw_grid, draw_grid_region, extract_region, draw_names
 from db_handler import parse_names_file
+from name_editor import NameEditor
 
 class CoordinateLabelSettingsWidget(QWidget):
     def __init__(self, default_font_size=20, default_color=(0, 0, 0, 255), default_font="Arial", parent=None):
@@ -135,11 +136,14 @@ class NameSettingsWidget(QWidget):
         }
 
 class ZoomableGraphicsView(QGraphicsView):
+    item_moved = pyqtSignal(object)
+
     def __init__(self, scene, parent=None):
         super().__init__(scene, parent)
+        self._zoom = 0
+        self._dragging = False
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self._zoom = 0
 
     def wheelEvent(self, event):
         zoom_in_factor = 1.25
@@ -157,6 +161,45 @@ class ZoomableGraphicsView(QGraphicsView):
             self._zoom = -10
             return
         self.scale(factor, factor)
+        if self.parent().parent.log_text_edit:
+            self.parent().parent.log_text_edit.append(f"Zoom changed: factor={self.transform().m11()}")
+
+    def mousePressEvent(self, event):
+        if self.parent().name_editor and self.parent().name_editor.is_editing:
+            scene_pos = self.mapToScene(event.pos())
+            item = self.scene().itemAt(scene_pos, self.transform())
+            if item and isinstance(item, QGraphicsTextItem):
+                self.parent().on_item_selected(item)
+                self._dragging = True
+                self.setDragMode(QGraphicsView.NoDrag)
+                if self.parent().parent.log_text_edit:
+                    self.parent().parent.log_text_edit.append(f"Mouse pressed: pos={event.pos()}, scene_pos={scene_pos}, item={item.rec_id}")
+            else:
+                if self.parent().parent.log_text_edit:
+                    self.parent().parent.log_text_edit.append(f"Mouse pressed: pos={event.pos()}, scene_pos={scene_pos}, no item")
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging and self.parent().name_editor and self.parent().name_editor.is_editing:
+            item = self.parent().name_editor.selected_item
+            if item:
+                new_pos = self.mapToScene(event.pos())
+                item.setPos(new_pos)
+                self.parent().name_editor.item_moved(item)  # Обновляем позицию в реальном времени
+                if self.parent().parent.log_text_edit:
+                    self.parent().parent.log_text_edit.append(f"Mouse moved: new_pos={new_pos}")
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._dragging and self.parent().name_editor and self.parent().name_editor.is_editing:
+            item = self.parent().name_editor.selected_item
+            if item:
+                self.item_moved.emit(item)
+                if self.parent().parent.log_text_edit:
+                    self.parent().parent.log_text_edit.append(f"Mouse released: item={item.rec_id}, pos={item.pos()}")
+            self._dragging = False
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
+        super().mouseReleaseEvent(event)
 
 class MapSettingsTab(QWidget):
     def __init__(self, parent):
@@ -475,10 +518,12 @@ class MapTab(QWidget):
         self.map_settings_tab = map_settings_tab
 
         self.input_map = None
-        self.processed_map = None
+        self.processed_map = None  # Карта с сеткой и надписями
+        self.image_with_grid = None  # Карта только с сеткой
         self.region_windows = []
         self.last_map = None
-        self._updating_combo = False  # Флаг для предотвращения рекурсии
+        self._updating_combo = False
+        self.name_editor = None
 
         layout = QVBoxLayout()
 
@@ -495,16 +540,56 @@ class MapTab(QWidget):
         btn_extract.clicked.connect(self.extract_region)
         layout.addWidget(btn_extract)
 
-        btn_save = QPushButton("Сохранить карту")
-        btn_save.clicked.connect(self.save_map)
+        btn_edit = QPushButton("Edit Names")
+        btn_edit.clicked.connect(self.toggle_edit_mode)
+        layout.addWidget(btn_edit)
+
+        btn_save = QPushButton("Save Names")
+        btn_save.clicked.connect(self.save_names)
         layout.addWidget(btn_save)
+
+        btn_save_map = QPushButton("Сохранить карту")
+        btn_save_map.clicked.connect(self.save_map)
+        layout.addWidget(btn_save_map)
 
         self.scene = self.parent.scene
         self.view = ZoomableGraphicsView(self.scene, self)
+        self.view.item_moved.connect(self.on_item_moved)
         layout.addWidget(self.view)
 
         self.setLayout(layout)
 
+    def toggle_edit_mode(self):
+        if not self.processed_map:
+            self.parent.log_text_edit.append("Сначала примените сетку к карте!")
+            return
+        if not self.name_editor:
+            params = self.map_settings_tab.get_parameters()
+            self.name_editor = NameEditor(
+                self, self.image_with_grid, self.input_map, os.path.join("db", "name.db"), 
+                params["name_settings"], params["origin"], 
+                params["output_resolution"][0] / self.input_map.size[0],
+                self.processed_map.size[0], self.processed_map.size[1],
+                params, self.parent.log_text_edit.append
+            )
+        if not self.name_editor.is_editing:
+            self.name_editor.start_editing()
+        else:
+            self.name_editor.stop_editing()
+
+    def save_names(self):
+        if self.name_editor and self.name_editor.is_editing:
+            self.name_editor.save_changes()
+        else:
+            self.parent.log_text_edit.append("Активируйте режим редактирования перед сохранением!")
+
+    def on_item_selected(self, item):
+        if self.name_editor and self.name_editor.is_editing:
+            self.name_editor.select_item(item)
+
+    def on_item_moved(self, item):
+        if self.name_editor and self.name_editor.is_editing:
+            self.name_editor.item_moved(item)
     def update_map_list(self):
         if self._updating_combo:
             return
@@ -561,7 +646,8 @@ class MapTab(QWidget):
         resized = resize_image(self.input_map, output_resolution)
         pixels_per_100m_output = params["pixels_per_100m"] * scale_factor
 
-        self.processed_map = draw_grid(
+        # Сохраняем карту с сеткой без надписей
+        self.image_with_grid = draw_grid(
             resized.copy(), 
             pixels_per_100m_output, 
             params["grid_thickness_100"],
@@ -577,7 +663,18 @@ class MapTab(QWidget):
             params["origin"],
             log_func=self.parent.log_text_edit.append
         )
-        self.parent.log_text_edit.append("Сетка успешно нанесена.")
+        
+        # Полная карта с надписями
+        self.processed_map = draw_names(
+            self.image_with_grid.copy(),
+            os.path.join("db", "name.db"),
+            params["name_settings"],
+            params["origin"],
+            scale=scale_factor,
+            global_width=self.image_with_grid.size[0],
+            global_height=self.image_with_grid.size[1],
+            log_func=self.parent.log_text_edit.append
+        )
         self.update_view(self.processed_map)
 
         db_path = os.path.join("db", "name.db")

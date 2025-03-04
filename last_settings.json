@@ -33,12 +33,12 @@
     "n_cells": 5,
     "name_settings": {
         "NameCityCapital": {
-            "font_size": 50,
+            "font_size": 70,
             "font_color": [
                 255,
                 0,
                 0,
-                255
+                180
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         },
@@ -47,38 +47,38 @@
             "font_color": [
                 0,
                 0,
-                255,
-                255
+                127,
+                180
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         },
         "NameVillage": {
             "font_size": 25,
             "font_color": [
-                0,
-                128,
-                0,
-                255
+                43,
+                138,
+                16,
+                180
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         },
         "Hill": {
             "font_size": 25,
             "font_color": [
-                128,
-                128,
-                128,
-                255
+                65,
+                65,
+                65,
+                180
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         },
         "NameLocal": {
             "font_size": 25,
             "font_color": [
-                108,
-                108,
+                102,
                 0,
-                255
+                0,
+                180
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         },
@@ -88,7 +88,7 @@
                 0,
                 128,
                 128,
-                255
+                180
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         }

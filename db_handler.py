@@ -89,3 +89,12 @@ def get_names(db_path, log_func=None):
     rows = cur.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+    
+def update_name_position(db_path, rec_id, x, y, log_func=None):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE names SET x = ?, y = ? WHERE id = ?", (x, y, rec_id))
+    conn.commit()
+    conn.close()
+    if log_func:
+        log_func(f"Обновлена позиция для id={rec_id}: x={x}, y={y}")
