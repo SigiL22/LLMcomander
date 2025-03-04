@@ -166,12 +166,12 @@ class MapSettingsTab(QWidget):
         main_layout = QFormLayout()
 
         self.output_width = QSpinBox()
-        self.output_width.setRange(1, 5000)
+        self.output_width.setRange(1, 20000)
         self.output_width.setValue(1000)
         main_layout.addRow("Выходное разрешение (ширина):", self.output_width)
 
         self.output_height = QSpinBox()
-        self.output_height.setRange(1, 5000)
+        self.output_height.setRange(1, 20000)
         self.output_height.setValue(1000)
         main_layout.addRow("Выходное разрешение (высота):", self.output_height)
 
@@ -397,26 +397,34 @@ class MapSettingsTab(QWidget):
             "center_col": self.center_col.value(),
             "center_row": self.center_row.value(),
             "n_cells": self.n_cells.value(),
-            "name_settings": name_settings
+            "name_settings": name_settings,
+            "last_map": self.parent.map_tab.last_map if self.parent.map_tab.last_map else None
         }
         return params
 
     def save_settings(self):
         params = self.get_parameters()
+        params["output_width"] = self.output_width.value()
+        params["output_height"] = self.output_height.value()
         file_path, _ = QFileDialog.getSaveFileName(self, "Сохранить настройки", "", "JSON Files (*.json)")
         if file_path:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(params, f, indent=4)
             self.parent.log_text_edit.append(f"Настройки сохранены: {file_path}")
+            # Сохраняем как последние настройки
+            with open("last_settings.json", "w", encoding="utf-8") as f:
+                json.dump(params, f, indent=4)
+            self.parent.log_text_edit.append(f"Последние настройки сохранены: last_settings.json (last_map: {params['last_map']})")
 
-    def load_settings(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Загрузить настройки", "", "JSON Files (*.json)")
-        if file_path:
+    def load_settings(self, file_path=None):
+        if file_path is None:
+            file_path, _ = QFileDialog.getOpenFileName(self, "Загрузить настройки", "", "JSON Files (*.json)")
+        if file_path and os.path.exists(file_path):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     params = json.load(f)
-                self.output_width.setValue(params["output_resolution"][0])
-                self.output_height.setValue(params["output_resolution"][1])
+                self.output_width.setValue(params.get("output_width", params["output_resolution"][0]))
+                self.output_height.setValue(params.get("output_height", params["output_resolution"][1]))
                 self.pixels_per_100m.setValue(params["pixels_per_100m"])
                 self.grid_thickness_100.setValue(params["grid_thickness_100"])
                 self.grid_thickness_1km.setValue(params["grid_thickness_1km"])
@@ -452,6 +460,10 @@ class MapSettingsTab(QWidget):
                             font_family = os.path.splitext(os.path.basename(font_path))[0].capitalize()
                             wdict["label_font"].setText(font_family)
 
+                if "last_map" in params:
+                    self.parent.map_tab.set_last_map(params["last_map"])
+                    self.parent.log_text_edit.append(f"Загружен путь последней карты: {params['last_map']}")
+
                 self.parent.log_text_edit.append(f"Настройки загружены: {file_path}")
             except Exception as e:
                 self.parent.log_text_edit.append(f"Ошибка загрузки настроек: {e}")
@@ -465,12 +477,15 @@ class MapTab(QWidget):
         self.input_map = None
         self.processed_map = None
         self.region_windows = []
+        self.last_map = None
+        self._updating_combo = False  # Флаг для предотвращения рекурсии
 
         layout = QVBoxLayout()
 
-        btn_load = QPushButton("Загрузить карту")
-        btn_load.clicked.connect(self.load_map)
-        layout.addWidget(btn_load)
+        self.map_combo = QComboBox()
+        self.update_map_list()
+        self.map_combo.currentTextChanged.connect(self.load_map_from_combo)
+        layout.addWidget(self.map_combo)
 
         btn_apply = QPushButton("Применить сетку")
         btn_apply.clicked.connect(self.apply_grid)
@@ -490,13 +505,50 @@ class MapTab(QWidget):
 
         self.setLayout(layout)
 
-    def load_map(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Выберите карту", "", "PNG Files (*.png);;All Files (*)")
-        if file_path:
+    def update_map_list(self):
+        if self._updating_combo:
+            return
+        self._updating_combo = True
+        maps_dir = "maps"
+        if not os.path.exists(maps_dir):
+            os.makedirs(maps_dir)
+        map_files = [f for f in os.listdir(maps_dir) if f.endswith(".png")]
+        current_text = self.map_combo.currentText()
+        self.map_combo.blockSignals(True)  # Отключаем сигналы во время обновления
+        self.map_combo.clear()
+        self.map_combo.addItem("Выберите карту...")
+        self.map_combo.addItems(map_files)
+        if self.last_map and os.path.basename(self.last_map) in map_files:
+            self.map_combo.setCurrentText(os.path.basename(self.last_map))
+        elif current_text in map_files:
+            self.map_combo.setCurrentText(current_text)
+        self.map_combo.blockSignals(False)  # Включаем сигналы обратно
+        self._updating_combo = False
+
+    def load_map_from_combo(self, map_name):
+        if map_name and map_name != "Выберите карту..." and not self._updating_combo:
+            map_path = os.path.join("maps", map_name)
+            self.load_map(map_path)
+            self.last_map = map_path
+            self.parent.log_text_edit.append(f"Выбрана карта: {map_path}")
+
+    def load_map(self, file_path):
+        if file_path and os.path.exists(file_path):
             Image.MAX_IMAGE_PIXELS = None
             self.input_map = Image.open(file_path).convert("RGBA")
             self.parent.log_text_edit.append(f"Карта загружена: {file_path}")
             self.update_view(self.input_map)
+            self.last_map = file_path
+            self.update_map_list()  # Обновляем список после загрузки
+
+    def load_last_map(self):
+        return self.last_map
+
+    def set_last_map(self, map_path):
+        self.last_map = map_path
+        self.update_map_list()
+        if map_path and os.path.exists(map_path):
+            self.load_map(map_path)
 
     def apply_grid(self):
         if self.input_map is None:

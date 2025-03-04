@@ -9,18 +9,6 @@ def draw_grid(image, pixels_per_100m, grid_thickness_100, grid_thickness_1km,
               color_100, color_1km, label_mode_h, label_mode_v, 
               font_size, font_path, font_color, margin, origin="top-left", 
               offset_x=0, offset_y=0, log_func=None):
-    """
-    Отрисовывает сетку для глобальной карты с учетом параметра origin.
-    
-    Интерпретация offset:
-      - top-left / bottom-left: offset_x – глобальный номер левой ячейки;
-        top-left / top-right: offset_y – глобальный номер верхней ячейки.
-      - top-right / bottom-right: offset_x – глобальный номер правой ячейки;
-        bottom-left / bottom-right: offset_y – глобальный номер нижней ячейки.
-    
-    Для правых (или нижних) вариантов порядок линий переворачивается, но глобальные
-    номера вычисляются как offset + local_index, что гарантирует неотрицательные значения.
-    """
     from PIL import Image, ImageDraw, ImageFont
     import math
     import os
@@ -48,26 +36,21 @@ def draw_grid(image, pixels_per_100m, grid_thickness_100, grid_thickness_1km,
                 log_func(f"Ошибка загрузки шрифта '{font_path}': {e}, использую шрифт по умолчанию")
             font = ImageFont.load_default()
     
-    # Определяем позиции линий и меток по горизонтали
+    # Определяем позиции линий и меток
     if origin in ("top-left", "bottom-left"):
-        # Отсчет слева направо
         h_line_positions = [i * interval for i in range(total_cols + 1)]
         h_label_positions = [i * interval + interval / 2 for i in range(total_cols)]
         h_labels = [offset_x + i for i in range(total_cols)]
-    else:  # top-right, bottom-right
-        # Отсчет справа налево: просто переворачиваем позиции
+    else:
         h_line_positions = [width - i * interval for i in range(total_cols + 1)]
         h_label_positions = [width - (i * interval + interval / 2) for i in range(total_cols)]
         h_labels = [offset_x + i for i in range(total_cols)]
     
-    # Аналогично для вертикали
     if origin in ("top-left", "top-right"):
-        # Отсчет сверху вниз
         v_line_positions = [i * interval for i in range(total_rows + 1)]
         v_label_positions = [i * interval + interval / 2 for i in range(total_rows)]
         v_labels = [offset_y + i for i in range(total_rows)]
-    else:  # bottom-left, bottom-right
-        # Отсчет снизу вверх: переворачиваем позиции
+    else:
         v_line_positions = [height - i * interval for i in range(total_rows + 1)]
         v_label_positions = [height - (i * interval + interval / 2) for i in range(total_rows)]
         v_labels = [offset_y + i for i in range(total_rows)]
@@ -83,7 +66,7 @@ def draw_grid(image, pixels_per_100m, grid_thickness_100, grid_thickness_1km,
     overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw_overlay = ImageDraw.Draw(overlay)
     
-    # Отрисовка горизонтальных линий
+    # Отрисовка линий
     for pos in h_line_positions:
         if origin in ("top-left", "bottom-left"):
             local_index = int(pos // interval)
@@ -94,22 +77,9 @@ def draw_grid(image, pixels_per_100m, grid_thickness_100, grid_thickness_1km,
         thickness = grid_thickness_1km if is_km_line else grid_thickness_100
         line_color = color_1km if is_km_line else color_100
         if log_func:
-            log_func(f"Рисую горизонтальную линию: pos X={pos:.1f}, local_index={local_index}, global_x={global_x}, км-линия={is_km_line}, толщина={thickness}, цвет={line_color}")
+            log_func(f"Рисую горизонтальную линию: pos X={pos:.1f}, global_x={global_x}, км-линия={is_km_line}")
         draw_overlay.line([(pos, 0), (pos, height)], fill=line_color, width=thickness)
     
-    # Отрисовка горизонтальных меток
-    for i, cx in enumerate(h_label_positions):
-        if -margin <= cx <= width + margin:
-            label = f"{(h_labels[i] if label_mode_h == '0' else h_labels[i] + 1):03d}"
-            bbox = font.getbbox(label)
-            text_width = bbox[2] - bbox[0]
-            text_x = max(0, min(width - text_width, cx - text_width / 2))
-            text_y = margin
-            draw_overlay.text((text_x, text_y), label, font=font, fill=font_color)
-            if log_func:
-                log_func(f"Рисую горизонтальную метку: label='{label}', pos X={cx:.1f}, global_x={h_labels[i]}")
-    
-    # Отрисовка вертикальных линий
     for pos in v_line_positions:
         if origin in ("top-left", "top-right"):
             local_index = int(pos // interval)
@@ -120,10 +90,24 @@ def draw_grid(image, pixels_per_100m, grid_thickness_100, grid_thickness_1km,
         thickness = grid_thickness_1km if is_km_line else grid_thickness_100
         line_color = color_1km if is_km_line else color_100
         if log_func:
-            log_func(f"Рисую вертикальную линию: pos Y={pos:.1f}, local_index={local_index}, global_y={global_y}, км-линия={is_km_line}, толщина={thickness}, цвет={line_color}")
+            log_func(f"Рисую вертикальную линию: pos Y={pos:.1f}, global_y={global_y}, км-линия={is_km_line}")
         draw_overlay.line([(0, pos), (width, pos)], fill=line_color, width=thickness)
     
-    # Отрисовка вертикальных меток
+    # Отрисовка текста на отдельном слое
+    text_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw_text = ImageDraw.Draw(text_layer)
+    
+    for i, cx in enumerate(h_label_positions):
+        if -margin <= cx <= width + margin:
+            label = f"{(h_labels[i] if label_mode_h == '0' else h_labels[i] + 1):03d}"
+            bbox = font.getbbox(label)
+            text_width = bbox[2] - bbox[0]
+            text_x = max(0, min(width - text_width, cx - text_width / 2))
+            text_y = margin
+            draw_text.text((text_x, text_y), label, font=font, fill=font_color)
+            if log_func:
+                log_func(f"Рисую горизонтальную метку: label='{label}', pos X={cx:.1f}, global_x={h_labels[i]}")
+    
     for j, cy in enumerate(v_label_positions):
         if -margin <= cy <= height + margin:
             label = f"{(v_labels[j] if label_mode_v == '0' else v_labels[j] + 1):03d}"
@@ -131,13 +115,15 @@ def draw_grid(image, pixels_per_100m, grid_thickness_100, grid_thickness_1km,
             text_height = bbox[3] - bbox[1]
             text_x = margin
             text_y = max(0, min(height - text_height, cy - text_height / 2))
-            draw_overlay.text((text_x, text_y), label, font=font, fill=font_color)
+            draw_text.text((text_x, text_y), label, font=font, fill=font_color)
             if log_func:
                 log_func(f"Рисую вертикальную метку: label='{label}', pos Y={cy:.1f}, global_y={v_labels[j]}")
     
+    # Комбинируем слои
     combined = Image.alpha_composite(image.convert("RGBA"), overlay)
+    combined = Image.alpha_composite(combined, text_layer)
     if log_func:
-        log_func("Сетка успешно наложена на карту")
+        log_func("Сетка и метки успешно наложены на карту")
     return combined
 
 # Аналогично обновим draw_grid_region
@@ -265,15 +251,6 @@ def world_to_pixel(world_x, world_y, image_width, image_height, origin, scale=1.
 
 def draw_names(image, db_path, type_settings, origin, scale=1.0, crop_offset=None, 
                global_width=None, global_height=None, log_func=None):
-    """
-    Извлекает записи из базы данных и наносит названия на изображение.
-    Для каждого типа используются индивидуальные настройки из словаря type_settings.
-    
-    Мировые координаты (x, y) из базы преобразуются в пиксельные с использованием функции world_to_pixel,
-    где глобальные размеры карты задаются через global_width и global_height.
-    Если crop_offset задан (tuple (left, top)), он вычитается из полученных координат – для вырезанных участков.
-    Если полученные пиксельные координаты выходят за рамки изображения, запись пропускается.
-    """
     from PIL import ImageDraw, ImageFont
     import os
     try:
@@ -284,9 +261,11 @@ def draw_names(image, db_path, type_settings, origin, scale=1.0, crop_offset=Non
         return image
 
     names = get_names(db_path, log_func)
-    draw = ImageDraw.Draw(image)
     
-    # Если глобальные размеры не заданы, используем размеры текущего изображения
+    # Создаём слой для текста
+    text_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(text_layer)
+    
     if global_width is None or global_height is None:
         global_width, global_height = image.width, image.height
 
@@ -294,18 +273,13 @@ def draw_names(image, db_path, type_settings, origin, scale=1.0, crop_offset=Non
         try:
             name = rec["name"]
             rec_type = rec["type"]
-            world_x = float(rec["x"])  # Мировые координаты в метрах
+            world_x = float(rec["x"])
             world_y = float(rec["y"])
 
-            # Преобразуем мировые координаты в пиксели с учётом начала координат и масштаба
             px, py = world_to_pixel(world_x, world_y, global_width, global_height, origin, scale)
-
-            # Учитываем смещение для вырезанных участков
             if crop_offset is not None:
                 px -= crop_offset[0]
                 py -= crop_offset[1]
-
-            # Фильтрация: пропускаем, если координаты вне изображения
             if not (0 <= px <= image.width and 0 <= py <= image.height):
                 continue
 
@@ -324,15 +298,16 @@ def draw_names(image, db_path, type_settings, origin, scale=1.0, crop_offset=Non
                     if log_func:
                         log_func(f"Ошибка загрузки шрифта '{font_path}': {e}, использую шрифт по умолчанию")
                     font = ImageFont.load_default()
-
             draw.text((px, py), name, font=font, fill=settings["font_color"])
         except Exception as e:
             if log_func:
                 log_func(f"Ошибка при отрисовке записи {rec}: {e}")
-
+    
+    # Комбинируем слой текста с изображением
+    combined = Image.alpha_composite(image.convert("RGBA"), text_layer)
     if log_func:
         log_func("Названия успешно нанесены на карту")
-    return image
+    return combined
 
 def extract_region(image, center_cell, n_cells, pixels_per_100m, origin="bottom-left", log_func=None):
     """
