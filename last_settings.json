@@ -55,10 +55,10 @@
         "NameVillage": {
             "font_size": 25,
             "font_color": [
-                43,
-                138,
-                16,
-                180
+                56,
+                56,
+                56,
+                255
             ],
             "font": "C:/Windows/Fonts/arial.ttf"
         },

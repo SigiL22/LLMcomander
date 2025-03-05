@@ -162,35 +162,35 @@ class ZoomableGraphicsView(QGraphicsView):
             self._zoom = -10
             return
         self.scale(factor, factor)
-        if self.parent().parent.log_text_edit:
-            self.parent().parent.log_text_edit.append(f"Zoom changed: factor={self.transform().m11()}")
+
 
     def mousePressEvent(self, event):
-        if self.parent().name_editor and self.parent().name_editor.is_editing:
+        parent_widget = self.parent()  # Получаем родительский объект (MapTab)
+        if hasattr(parent_widget, 'name_editor') and parent_widget.name_editor and parent_widget.name_editor.is_editing:
             scene_pos = self.mapToScene(event.pos())
             # Логируем все объекты под курсором
             items_at_pos = self.scene().items(scene_pos)
-            if self.parent().parent.log_text_edit:
+            if parent_widget.parent.log_text_edit:  # Обращаемся к логгеру через родителя MapTab (MainWindow)
                 types_list = [type(item).__name__ for item in items_at_pos]
-                self.parent().parent.log_text_edit.append(f"Items at {scene_pos}: {types_list}")
+                parent_widget.parent.log_text_edit.append(f"Items at {scene_pos}: {types_list}")
             item = self.scene().itemAt(scene_pos, self.transform())
             # Если возвращается QGraphicsRectItem, а у него есть родительский QGraphicsTextItem, используем родителя
             if item and isinstance(item, QGraphicsRectItem) and item.parentItem() and isinstance(item.parentItem(), QGraphicsTextItem):
-                if self.parent().parent.log_text_edit:
-                    self.parent().parent.log_text_edit.append(f"Item is QGraphicsRectItem, switching to parent QGraphicsTextItem with id={item.parentItem().rec_id}")
+                if parent_widget.parent.log_text_edit:
+                    parent_widget.parent.log_text_edit.append(f"Item is QGraphicsRectItem, switching to parent QGraphicsTextItem with id={item.parentItem().rec_id}")
                 item = item.parentItem()
             if item and isinstance(item, QGraphicsTextItem):
-                if self.parent().name_editor.selected_item != item:
-                    self.parent().on_item_selected(item)
+                if parent_widget.name_editor.selected_item != item:
+                    parent_widget.on_item_selected(item)
                 self._dragging = True
                 # Сохраняем смещение от точки клика до позиции элемента
                 self._drag_offset = scene_pos - item.pos()
                 self.setDragMode(QGraphicsView.NoDrag)
-                if self.parent().parent.log_text_edit:
-                    self.parent().parent.log_text_edit.append(f"Mouse pressed: pos={event.pos()}, scene_pos={scene_pos}, item id={item.rec_id}")
+                if parent_widget.parent.log_text_edit:
+                    parent_widget.parent.log_text_edit.append(f"Mouse pressed: pos={event.pos()}, scene_pos={scene_pos}, item id={item.rec_id}")
             else:
-                if self.parent().parent.log_text_edit:
-                    self.parent().parent.log_text_edit.append(f"Mouse pressed: pos={event.pos()}, scene_pos={scene_pos}, no valid QGraphicsTextItem, raw item: {item}")
+                if parent_widget.parent.log_text_edit:
+                    parent_widget.parent.log_text_edit.append(f"Mouse pressed: pos={event.pos()}, scene_pos={scene_pos}, no valid QGraphicsTextItem, raw item: {item}")
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
