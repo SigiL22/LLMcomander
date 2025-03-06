@@ -58,6 +58,9 @@ tileLayer.on('loading', function() {
 var gridLayer = new GridLayer();
 gridLayer.addTo(map);
 
+var namesLayer = new NamesLayer();
+namesLayer.addTo(map);
+
 // Обновляем сетку при изменении зума или перемещении
 map.on('zoomend moveend resize', function() {
   gridLayer._redraw();

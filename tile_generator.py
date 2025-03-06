@@ -71,7 +71,7 @@ def generate_tiles(input_image_path, output_folder, max_zoom=7, tile_size=256):
                 # Конвертируем в 8-битный режим
                 tile8 = tile.convert("P", palette=Image.ADAPTIVE, colors=256)
                 tile_path = os.path.join(x_folder, f"{y}.png")
-                tile8.save(tile_path, optimize=True)
+                tile8.save(tile_path, optimize=False)
                 logger.debug(f"Сохранен тайл: {tile_path}")
         logger.info(f"Уровень {z} завершён: {tiles_x}x{tiles_y} тайлов.")
     logger.info("Нарезка завершена.")
