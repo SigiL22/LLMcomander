@@ -1,16 +1,17 @@
 // js/coordToolbar.js
 
-// Функция преобразования контейнерной точки в игровые координаты (в метрах)
-function pixelToGame(point) {
-  var gameX = point.x / scaleFactor;
-  var gameY = islandHeight - (point.y / scaleFactor);
+// Функция преобразования LatLng в игровые координаты (в метрах)
+// Здесь мы проецируем latlng на уровень 7 и переводим пиксели в метры.
+function pixelToGame(latlng) {
+  var point7 = map.project(latlng, 7); // точка на уровне 7
+  var gameX = point7.x / scaleFactor;  // scaleFactor = mapImageWidth / islandWidth
+  var gameY = islandHeight - (point7.y / scaleFactor);
   return { x: gameX, y: gameY };
 }
 
 // Функция обновления тулбара координат
-function updateCoordToolbar(e) {
-  var containerPoint = map.latLngToContainerPoint(e.latlng);
-  var gameCoords = pixelToGame(containerPoint);
+function updateCoordToolbar(latlng) {
+  var gameCoords = pixelToGame(latlng);
   
   // Номер ячейки (каждая ячейка = 100 м)
   var cellX = Math.floor(gameCoords.x / 100);
@@ -25,5 +26,11 @@ function updateCoordToolbar(e) {
   document.getElementById("meterCoords").innerText = "Метры: X=" + meterX + "  Y=" + meterY;
 }
 
-// Прикрепляем обработчик к событию mousemove карты
-map.on('mousemove', updateCoordToolbar);
+// Прикрепляем обработчик непосредственно к элементу карты (#map)
+document.getElementById('map').addEventListener('mousemove', function(e) {
+  // Преобразуем событие мыши в контейнерную точку
+  var containerPoint = map.mouseEventToContainerPoint(e);
+  // Получаем LatLng для этой точки
+  var latlng = map.containerPointToLatLng(containerPoint);
+  updateCoordToolbar(latlng);
+});

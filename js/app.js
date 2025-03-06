@@ -24,10 +24,11 @@ var labelOpacity = 0.8;
 // Инициализация карты с использованием CRS.Simple
 var map = L.map('map', {
   crs: L.CRS.Simple,
-  minZoom: 0,
-  maxZoom: 7,
+  minZoom: 2,
+  maxZoom: 9,
   updateWhenIdle: true,
-  updateWhenZooming: false
+  updateWhenZooming: false,
+  zoomControl: false
 });
 
 // Вычисляем границы карты через unproject для уровня зума 7
@@ -43,7 +44,9 @@ var tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
   noWrap: true,
   attribution: "Карта Chernarus",
   updateWhenIdle: true,
-  tileBuffer: 2
+  tileBuffer: 2,
+  maxNativeZoom: 7, // Тайлы предоставляются до зума 7
+  maxZoom: 9        // Но пользователю доступны зумы до 9
 }).addTo(map);
 
 tileLayer.on('loading', function() {
