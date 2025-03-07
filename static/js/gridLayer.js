@@ -56,11 +56,11 @@ var GridLayer = L.Layer.extend({
 
     var currentZoom = this._map.getZoom();
     console.log("Текущий зум: " + currentZoom);
-    // Используем глобальную переменную zoomThreshold (например, 4) для определения отображения стометровой сетки
+    // Используем глобальную переменную zoomThreshold для определения отображения стометровой сетки
     var drawHm = currentZoom >= zoomThreshold;
 
     // Вычисляем контейнерные координаты для углов острова (карты)
-    var islandSw = gameToContainerPoint(0, 0);              // левый нижний угол
+    var islandSw = gameToContainerPoint(0, 0);                // левый нижний угол
     var islandNe = gameToContainerPoint(islandWidth, islandHeight); // правый верхний угол
 
     // Определяем видимые границы острова относительно контейнера
@@ -76,9 +76,7 @@ var GridLayer = L.Layer.extend({
     // Рисуем фоновые полосы (окантовку) для подписей
     ctx.fillStyle = "white";
     ctx.globalAlpha = 0.9;
-    // Верхняя полоса: если верхний край острова виден, рисуем её за ним, иначе – по верху контейнера
     var topStripeY = (visibleTop > 0) ? visibleTop - topStripeHeight : 0;
-    // Левая полоса: аналогично
     var leftStripeX = (visibleLeft > 0) ? visibleLeft - leftStripeWidth : 0;
     ctx.fillRect(visibleLeft, topStripeY, visibleRight - visibleLeft, topStripeHeight);
     ctx.fillRect(leftStripeX, visibleTop, leftStripeWidth, visibleBottom - visibleTop);
@@ -92,7 +90,7 @@ var GridLayer = L.Layer.extend({
     for (var x = 0; x <= islandWidth; x += kmStep) {
       var pt = gameToContainerPoint(x, islandHeight / 2);
       if (pt.x < visibleLeft || pt.x > visibleRight) continue;
-      if (pt.x < visibleLeft + leftStripeWidth) continue; // не рисуем в левой окантовке
+      if (pt.x < visibleLeft + leftStripeWidth) continue;
       ctx.beginPath();
       ctx.moveTo(pt.x, visibleTop);
       ctx.lineTo(pt.x, visibleBottom);
@@ -102,7 +100,7 @@ var GridLayer = L.Layer.extend({
     for (var y = 0; y <= islandHeight; y += kmStep) {
       var pt = gameToContainerPoint(islandWidth / 2, y);
       if (pt.y < visibleTop || pt.y > visibleBottom) continue;
-      if (pt.y >= visibleTop && pt.y <= visibleTop + topStripeHeight) continue; // не рисуем в верхней окантовке
+      if (pt.y >= visibleTop && pt.y <= visibleTop + topStripeHeight) continue;
       ctx.beginPath();
       ctx.moveTo(visibleLeft, pt.y);
       ctx.lineTo(visibleRight, pt.y);
@@ -136,16 +134,18 @@ var GridLayer = L.Layer.extend({
         ctx.lineTo(visibleRight, pt.y);
         ctx.stroke();
       }
+      ctx.globalAlpha = 1.0;
     }
 
-    // Отрисовка подписей
+    // Перед отрисовкой текста сбрасываем прозрачность на значение надписей (labelOpacity)
+    ctx.globalAlpha = labelOpacity;
     ctx.fillStyle = labelColor;
     ctx.font = labelFont;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     
     if (!drawHm) {
       // Если стометровая сетка не видна, рисуем километровые подписи в окантовке
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
       for (var x = 0; x <= islandWidth; x += kmStep) {
         var midX = x + kmStep / 2;
         var pt = gameToContainerPoint(midX, islandHeight / 2);
@@ -154,8 +154,6 @@ var GridLayer = L.Layer.extend({
         var label = cellIndex.toString().padStart(3, '0');
         ctx.fillText(label, pt.x, labelY);
       }
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
       for (var y = 0; y <= islandHeight; y += kmStep) {
         var midY = y + kmStep / 2;
         var pt = gameToContainerPoint(islandWidth / 2, midY);
@@ -166,8 +164,6 @@ var GridLayer = L.Layer.extend({
       }
     } else {
       // Если стометровая сетка видна, рисуем подписи для каждой сотометровой ячейки
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
       for (var x = 0; x <= islandWidth; x += hmStep) {
         var midX = x + hmStep / 2;
         var pt = gameToContainerPoint(midX, islandHeight / 2);
@@ -176,8 +172,6 @@ var GridLayer = L.Layer.extend({
         var label = cellIndex.toString().padStart(3, '0');
         ctx.fillText(label, pt.x, labelY);
       }
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
       for (var y = 0; y <= islandHeight; y += hmStep) {
         var midY = y + hmStep / 2;
         var pt = gameToContainerPoint(islandWidth / 2, midY);
@@ -189,15 +183,13 @@ var GridLayer = L.Layer.extend({
       
       // Отрисовка координат ячейки внутри каждой сотометровой ячейки, если включен чекбокс
       if (showCellCoords) {
-        // Вычисляем базовый размер ячейки (в пикселях) при maxZoom (7)
-        var baseCellSize = hmStep * scaleFactor; // базовый размер ячейки при maxZoom
-        // Вычисляем текущий размер ячейки по оси X
+        var baseCellSize = hmStep * scaleFactor;
         var pt0 = gameToContainerPoint(0, islandHeight / 2);
         var pt1 = gameToContainerPoint(hmStep, islandHeight / 2);
         var currentCellSize = pt1.x - pt0.x;
         var textScale = currentCellSize / baseCellSize;
         
-        var baseFontSize = parseInt(cellCoordFontSize); // базовый размер шрифта, например "12px"
+        var baseFontSize = parseInt(cellCoordFontSize);
         var scaledFontSize = Math.round(baseFontSize * textScale) + "px";
         var finalCellFont = scaledFontSize + " " + cellCoordFontFamily;
         
@@ -208,17 +200,14 @@ var GridLayer = L.Layer.extend({
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         
-        // Вычисляем отступ между строками, масштабированный
-        var baseOffset = 24; // базовый отступ при maxZoom
+        var baseOffset = 24;
         var lineOffset = Math.round(baseOffset * textScale);
         
-        // Отрисовка надписей только для ячеек, центр которых не попадает в окантовку
         for (var cx = 0; cx < islandWidth; cx += hmStep) {
           for (var cy = 0; cy < islandHeight; cy += hmStep) {
             var centerX = cx + hmStep / 2;
             var centerY = cy + hmStep / 2;
             var ptCenter = gameToContainerPoint(centerX, centerY);
-            // Если центр ячейки попадает в окантовку сверху или слева, пропускаем
             if (ptCenter.x < (leftStripeX + leftStripeWidth)) continue;
             if (ptCenter.y >= visibleTop && ptCenter.y <= visibleTop + topStripeHeight) continue;
             var cellXVal = Math.floor(centerX / 100);
@@ -231,6 +220,8 @@ var GridLayer = L.Layer.extend({
         }
       }
     }
+    // После отрисовки текста можно восстановить globalAlpha, если требуется (например, 1.0)
+    ctx.globalAlpha = 1.0;
     console.log("Отрисовка сетки завершена.");
   }
 });

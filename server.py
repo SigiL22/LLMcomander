@@ -14,6 +14,9 @@ logger = logging.getLogger("TileServer")
 TILES_FOLDER = "maps/chernarus/"
 CACHE_TIMEOUT = 86400  # 24 часа
 
+# Путь к прозрачному тайлу
+TRANSPARENT_TILE = "transparent.png"  # Файл должен находиться в папке static
+
 @app.before_request
 def log_request_info():
     logger.debug(f"Запрос: {request.method} {request.url} от {request.remote_addr}")
@@ -26,6 +29,10 @@ def serve_index():
 @app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
 def get_tile(z, x, y):
     logger.info(f"Запрос тайла: z={z}, x={x}, y={y}")
+    if x < 0 or y < 0:
+        logger.error(f"Отрицательные индексы тайла: x={x}, y={y}")
+        return send_from_directory(app.static_folder, TRANSPARENT_TILE)
+        
     tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
     tile_filename = f"{y}.png"
     tile_path = os.path.join(tile_dir, tile_filename)
@@ -37,7 +44,8 @@ def get_tile(z, x, y):
         return response
     else:
         logger.error(f"Тайл не найден: {tile_path}")
-        abort(404)
+        # Если тайл не найден, возвращаем прозрачный тайл
+        return send_from_directory(app.static_folder, TRANSPARENT_TILE)
 
 # Эндпоинт для получения названий из базы данных
 @app.route("/names")
