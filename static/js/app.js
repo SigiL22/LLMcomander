@@ -1,25 +1,17 @@
 console.log("Инициализация приложения...");
 
-// Глобальные переменные для системы координат и карты
-// Размер острова (игровая область) в метрах
-var islandWidth = 15360,
-    islandHeight = 15360;
-// Размер исходного изображения (в пикселях) – теперь 32768×32768
-var mapImageWidth = 32768,
-    mapImageHeight = 32768;
-// Коэффициент преобразования: 1 метр = scaleFactor пикселей
-var scaleFactor = mapImageWidth / islandWidth;  // ~2.1333
+// Загружаем конфигурацию из Config (файл config.js должен быть подключён раньше)
+Config.load();
+var conf = Config.get();
 
-// Интервалы для сетки
-var kmStep = 1000;  // километровая сетка (1000 м)
-var hmStep = 100;   // стометровая сетка (100 м)
-
-// Параметры стилей (по умолчанию)
-var kmLineStyle = { color: "red", weight: 2, opacity: 0.8 };
-var hmLineStyle = { color: "blue", weight: 1, opacity: 0.5 };
-var labelFont = "14px sans-serif";
-var labelColor = "black";
-var labelOpacity = 0.8;
+// Извлекаем параметры из конфигурации
+var islandWidth = conf.islandWidth,
+    islandHeight = conf.islandHeight,
+    mapImageWidth = conf.mapImageWidth,
+    mapImageHeight = conf.mapImageHeight,
+    scaleFactor = conf.scaleFactor,  // вычисляется в Config.load()/apply()
+    kmStep = conf.kmStep,
+    hmStep = conf.hmStep;
 
 // Инициализация карты с использованием CRS.Simple
 var map = L.map('map', {
@@ -36,7 +28,7 @@ var southWest = map.unproject([0, mapImageHeight], 7);
 var northEast = map.unproject([mapImageWidth, 0], 7);
 var bounds = new L.LatLngBounds(southWest, northEast);
 
-// Применяем границы для первоначального масштабирования (без ограничения перемещения)
+// Применяем границы для первоначального масштабирования
 map.fitBounds(bounds);
 
 // Подключаем тайловый слой с вашего сервера
@@ -45,25 +37,39 @@ var tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
   attribution: "Карта Chernarus",
   updateWhenIdle: true,
   tileBuffer: 2,
-  maxNativeZoom: 7, // Тайлы предоставляются до зума 7
-  maxZoom: 9        // Но пользователю доступны зумы до 9
+  maxNativeZoom: 7,
+  maxZoom: 9,
+  getTileUrl: function(coords) {
+    if (coords.x < 0 || coords.y < 0) {
+      return '/transparent.png';
+    }
+    return L.Util.template(this._url, L.extend({
+      z: coords.z,
+      x: coords.x,
+      y: coords.y
+    }, this.options));
+  }
 }).addTo(map);
 
 tileLayer.on('loading', function() {
   console.log("Началась загрузка тайлов...");
 });
-// Логи для tileload и tileerror оставлены минимальными
 
-// Создаем и добавляем пользовательский слой сетки (реализован в js/gridLayer.js)
+// Создаем и добавляем пользовательские слои
 var gridLayer = new GridLayer();
 gridLayer.addTo(map);
 
 var namesLayer = new NamesLayer();
 namesLayer.addTo(map);
 
-// Обновляем сетку при изменении зума или перемещении
+// Обновляем сетку при изменении зума, перемещении или изменении размера
 map.on('zoomend moveend resize', function() {
-  gridLayer._redraw();
+  if (gridLayer && typeof gridLayer._redraw === "function") {
+    gridLayer._redraw();
+  }
 });
+
+// Применяем настройки из конфигурации (пересчитываем производные параметры и перерисовываем слои)
+Config.apply();
 
 console.log("Приложение инициализировано.");

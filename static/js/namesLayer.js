@@ -1,10 +1,45 @@
 // js/namesLayer.js
 
+// Функция перевода игровых координат в latlng (используется фиксированный зум 7)
+function gameToLatLng(X, Y) {
+  var conf = Config.get();
+  var px = X * (conf.mapImageWidth / conf.islandWidth);
+  var py = conf.mapImageHeight - (Y * (conf.mapImageHeight / conf.islandHeight));
+  return map.unproject([px, py], 7);
+}
+
+// Функция для динамического обновления настроек типов на основе полученных надписей.
+// Если для какого-то типа еще нет настроек, создаем их со значениями по умолчанию.
+function updateNameSettingsFromNames(namesArray) {
+  var conf = Config.get();
+  var settings = conf.nameSettings || {};
+  // Значения по умолчанию для нового типа
+  var defaultStyle = {
+    displayName: "", // запишем сам тип
+    fontFamily: "sans-serif",
+    fontSize: 14,
+    color: "#000000",
+    opacity: 1,
+    minZoom: 4
+  };
+  namesArray.forEach(function(item) {
+    if (!settings.hasOwnProperty(item.type)) {
+      var newStyle = Object.assign({}, defaultStyle);
+      newStyle.displayName = item.type;
+      settings[item.type] = newStyle;
+      console.log("Добавлен новый тип в конфигурацию:", item.type, newStyle);
+    }
+  });
+  conf.nameSettings = settings;
+  Config.set(conf);
+  Config.save();
+}
+
 var NamesLayer = L.Layer.extend({
   onAdd: function(map) {
     this._map = map;
     
-    // Создаем canvas для отрисовки названий
+    // Создаем canvas для отрисовки надписей
     this._canvas = L.DomUtil.create('canvas', 'leaflet-names-layer');
     var size = map.getSize();
     this._canvas.width = size.x;
@@ -13,10 +48,10 @@ var NamesLayer = L.Layer.extend({
     pane.appendChild(this._canvas);
     this._canvas.style.zIndex = 1001;
     
-    // Подписываемся на события карты
+    // Подписываемся на события карты для перерисовки
     map.on('moveend zoomend resize', this._reset, this);
     
-    // Запрос данных с сервера
+    // Запрашиваем данные с сервера
     this._fetchNames();
   },
   onRemove: function(map) {
@@ -31,19 +66,18 @@ var NamesLayer = L.Layer.extend({
   _fetchNames: function() {
     var self = this;
     fetch('/names')
-      .then(response => {
-         return response.json();
-      })
+      .then(response => response.json())
       .then(data => {
          self._names = data;
+         // Динамически обновляем настройки типов надписей
+         updateNameSettingsFromNames(data);
          self._redraw();
       })
       .catch(error => console.error("Ошибка при запросе /names:", error));
   },
   _redraw: function() {
-    if (!this._names) {
-      return;
-    }
+    if (!this._names) return;
+    
     var canvas = this._canvas;
     var ctx = canvas.getContext('2d');
     var size = this._map.getSize();
@@ -51,26 +85,33 @@ var NamesLayer = L.Layer.extend({
     
     var currentZoom = this._map.getZoom();
     
-    if (typeof nameStyles === "undefined") {
-      nameStyles = {
-        "NameCityCapital": { font: "16px Arial", color: "#FF0000", opacity: 1, minZoom: 4 },
-        "NameCity": { font: "12px Verdana", color: "#0000FF", opacity: 0.8, minZoom: 5 },
-        "NameVillage": { font: "14px 'Times New Roman'", color: "#00AA00", opacity: 0.9, minZoom: 6 }
-      };
-      console.log("Используем значения по умолчанию для nameStyles:", nameStyles);
+    // Получаем настройки для надписей из Config
+    var conf = Config.get();
+    var nameStyles = {};
+    for (var t in conf.nameSettings) {
+      if (conf.nameSettings.hasOwnProperty(t)) {
+        var item = conf.nameSettings[t];
+        nameStyles[t] = {
+          font: item.fontSize + "px " + item.fontFamily,
+          color: item.color,
+          opacity: item.opacity, // значение в диапазоне 0..1
+          minZoom: item.minZoom
+        };
+      }
     }
     
+    // Отрисовка надписей для каждого элемента из базы
     this._names.forEach(function(item) {
       var style = nameStyles[item.type];
       if (!style) {
          console.log("Стиль не найден для типа:", item.type);
          return;
       }
-      if (currentZoom < style.minZoom) {
-         return;
-      }
+      if (currentZoom < style.minZoom) return;
       
-      var pt = gameToContainerPoint(item.x, item.y);
+      // Вычисляем latlng через gameToLatLng, затем переводим в container point
+      var latlng = gameToLatLng(item.x, item.y);
+      var pt = map.latLngToContainerPoint(latlng);
       
       ctx.font = style.font;
       ctx.fillStyle = hexToRgba(style.color, style.opacity);
@@ -80,6 +121,6 @@ var NamesLayer = L.Layer.extend({
       ctx.fillText(item.name, pt.x, pt.y);
     });
     
-    console.log("Отрисовка завершена");
+    console.log("Отрисовка надписей завершена");
   }
 });

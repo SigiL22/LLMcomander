@@ -2,25 +2,26 @@
 
 // Размеры для фоновых полос подписей (окантовка)
 var topStripeHeight = 25;   // высота верхней полосы для подписей оси X
-var leftStripeWidth = 40;   // ширина левой полосы для подписей оси Y
+var leftStripeWidth = 30;   // ширина левой полосы для подписей оси Y
 
-// Функция преобразования hex-цвета в rgba-строку с указанной прозрачностью
+// Функция преобразования hex-цвета в rgba-строку с заданной прозрачностью
 function hexToRgba(hex, alpha) {
   hex = hex.replace('#', '');
   if (hex.length === 3) {
     hex = hex.split('').map(function(h) { return h + h; }).join('');
   }
-  var r = parseInt(hex.substr(0,2), 16);
-  var g = parseInt(hex.substr(2,2), 16);
-  var b = parseInt(hex.substr(4,2), 16);
+  var r = parseInt(hex.substr(0, 2), 16);
+  var g = parseInt(hex.substr(2, 2), 16);
+  var b = parseInt(hex.substr(4, 2), 16);
   return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
 }
 
 // Функция преобразования игровой координаты (в метрах) в контейнерную точку
 // (0,0) – левый нижний угол игры, (islandWidth, islandHeight) – правый верхний угол.
 function gameToContainerPoint(X, Y) {
-  var px = X * (mapImageWidth / islandWidth);
-  var py = mapImageHeight - (Y * (mapImageHeight / islandHeight));
+  var conf = Config.get();
+  var px = X * (conf.mapImageWidth / conf.islandWidth);
+  var py = conf.mapImageHeight - (Y * (conf.mapImageHeight / conf.islandHeight));
   var latlng = map.unproject([px, py], 7);
   return map.latLngToContainerPoint(latlng);
 }
@@ -49,6 +50,29 @@ var GridLayer = L.Layer.extend({
   },
   _redraw: function() {
     console.log("Начинается отрисовка сетки...");
+    
+    var conf = Config.get();
+    var islandWidth = conf.islandWidth;
+    var islandHeight = conf.islandHeight;
+    var mapImageWidth = conf.mapImageWidth;
+    var mapImageHeight = conf.mapImageHeight;
+    var scaleFactor = conf.scaleFactor;
+    var kmStep = conf.kmStep;
+    var hmStep = conf.hmStep;
+    
+    var kmLineStyle = conf.kmLineStyle;
+    var hmLineStyle = conf.hmLineStyle;
+    
+    var labelFont = conf.labelStyle.fontSize + "px " + conf.labelStyle.fontFamily;
+    var labelColor = conf.labelStyle.color;
+    var labelOpacity = conf.labelStyle.opacity;
+    
+    var zoomThreshold = conf.zoomThreshold;
+    var showCellCoords = conf.cellCoordStyle.show;
+    var cellCoordFont = conf.cellCoordStyle.fontSize + "px " + conf.cellCoordStyle.fontFamily;
+    var cellCoordColor = conf.cellCoordStyle.color;
+    var cellCoordOpacity = conf.cellCoordStyle.opacity;
+    
     var canvas = this._canvas;
     var ctx = canvas.getContext('2d');
     var size = this._map.getSize();
@@ -56,14 +80,12 @@ var GridLayer = L.Layer.extend({
 
     var currentZoom = this._map.getZoom();
     console.log("Текущий зум: " + currentZoom);
-    // Используем глобальную переменную zoomThreshold для определения отображения стометровой сетки
     var drawHm = currentZoom >= zoomThreshold;
 
-    // Вычисляем контейнерные координаты для углов острова (карты)
+    // Вычисляем контейнерные координаты для углов острова
     var islandSw = gameToContainerPoint(0, 0);                // левый нижний угол
     var islandNe = gameToContainerPoint(islandWidth, islandHeight); // правый верхний угол
 
-    // Определяем видимые границы острова относительно контейнера
     var visibleLeft = (islandSw.x >= 0) ? islandSw.x : 0;
     var visibleTop = (islandNe.y >= 0) ? islandNe.y : 0;
     var visibleRight = (islandNe.x <= size.x) ? islandNe.x : size.x;
@@ -73,7 +95,7 @@ var GridLayer = L.Layer.extend({
                 ", правый: " + visibleRight.toFixed(2) +
                 ", низ: " + visibleBottom.toFixed(2));
 
-    // Рисуем фоновые полосы (окантовку) для подписей
+    // Отрисовка фоновых полос (окантовка) для подписей
     ctx.fillStyle = "white";
     ctx.globalAlpha = 0.9;
     var topStripeY = (visibleTop > 0) ? visibleTop - topStripeHeight : 0;
@@ -82,21 +104,27 @@ var GridLayer = L.Layer.extend({
     ctx.fillRect(leftStripeX, visibleTop, leftStripeWidth, visibleBottom - visibleTop);
     ctx.globalAlpha = 1.0;
 
-    // Отрисовка километровых линий
+    // Отрисовка километровых линий (вертикальные)
     ctx.strokeStyle = kmLineStyle.color;
     ctx.lineWidth = kmLineStyle.weight;
     ctx.globalAlpha = kmLineStyle.opacity;
-    // Вертикальные линии
     for (var x = 0; x <= islandWidth; x += kmStep) {
       var pt = gameToContainerPoint(x, islandHeight / 2);
+      if (x <= kmStep * 2) {  // Логируем для первых двух линий
+        //console.log("Км: Вертикальная линия x=" + x + ", pt.x=" + pt.x);
+      }
       if (pt.x < visibleLeft || pt.x > visibleRight) continue;
-      if (pt.x < visibleLeft + leftStripeWidth) continue;
+      if (pt.x < visibleLeft + leftStripeWidth) {
+        //console.log("Км: Пропуск линии x=" + x + " из-за левой окантовки: pt.x=" + pt.x +
+        //            ", visibleLeft=" + visibleLeft + ", leftStripeWidth=" + leftStripeWidth);
+        continue;
+      }
       ctx.beginPath();
       ctx.moveTo(pt.x, visibleTop);
       ctx.lineTo(pt.x, visibleBottom);
       ctx.stroke();
     }
-    // Горизонтальные линии
+    // Отрисовка километровых линий (горизонтальные)
     for (var y = 0; y <= islandHeight; y += kmStep) {
       var pt = gameToContainerPoint(islandWidth / 2, y);
       if (pt.y < visibleTop || pt.y > visibleBottom) continue;
@@ -112,18 +140,27 @@ var GridLayer = L.Layer.extend({
       ctx.strokeStyle = hmLineStyle.color;
       ctx.lineWidth = hmLineStyle.weight;
       ctx.globalAlpha = hmLineStyle.opacity;
-      // Стометровые вертикальные линии
+      // Отрисовка сотометровых вертикальных линий
       for (var x = 0; x <= islandWidth; x += hmStep) {
         if (x % kmStep === 0) continue;
         var pt = gameToContainerPoint(x, islandHeight / 2);
+        // Добавляем лог для hm линии, если x меньше, чем первая ожидаемая линия
+        if (x <= hmStep * 2) {
+          //console.log("HM: Вертикальная линия x=" + x + ", pt.x=" + pt.x);
+        }
         if (pt.x < visibleLeft || pt.x > visibleRight) continue;
-        if (pt.x < visibleLeft + leftStripeWidth) continue;
+        if (pt.x < visibleLeft + leftStripeWidth) {
+          //console.log("HM: Пропуск линии x=" + x + " из-за левой окантовки: pt.x=" + pt.x +
+           //           ", visibleLeft=" + visibleLeft + ", leftStripeWidth=" + leftStripeWidth);
+          continue;
+        }
+        //console.log("HM: Рисование линии x=" + x + ", pt.x=" + pt.x);
         ctx.beginPath();
         ctx.moveTo(pt.x, visibleTop);
         ctx.lineTo(pt.x, visibleBottom);
         ctx.stroke();
       }
-      // Стометровые горизонтальные линии
+      // Отрисовка сотометровых горизонтальных линий
       for (var y = 0; y <= islandHeight; y += hmStep) {
         if (y % kmStep === 0) continue;
         var pt = gameToContainerPoint(islandWidth / 2, y);
@@ -137,7 +174,7 @@ var GridLayer = L.Layer.extend({
       ctx.globalAlpha = 1.0;
     }
 
-    // Перед отрисовкой текста сбрасываем прозрачность на значение надписей (labelOpacity)
+    // Отрисовка подписей (сброс прозрачности для текста)
     ctx.globalAlpha = labelOpacity;
     ctx.fillStyle = labelColor;
     ctx.font = labelFont;
@@ -145,7 +182,6 @@ var GridLayer = L.Layer.extend({
     ctx.textBaseline = "middle";
     
     if (!drawHm) {
-      // Если стометровая сетка не видна, рисуем километровые подписи в окантовке
       for (var x = 0; x <= islandWidth; x += kmStep) {
         var midX = x + kmStep / 2;
         var pt = gameToContainerPoint(midX, islandHeight / 2);
@@ -163,7 +199,6 @@ var GridLayer = L.Layer.extend({
         ctx.fillText(label, labelX, pt.y);
       }
     } else {
-      // Если стометровая сетка видна, рисуем подписи для каждой сотометровой ячейки
       for (var x = 0; x <= islandWidth; x += hmStep) {
         var midX = x + hmStep / 2;
         var pt = gameToContainerPoint(midX, islandHeight / 2);
@@ -181,7 +216,6 @@ var GridLayer = L.Layer.extend({
         ctx.fillText(label, labelX, pt.y);
       }
       
-      // Отрисовка координат ячейки внутри каждой сотометровой ячейки, если включен чекбокс
       if (showCellCoords) {
         var baseCellSize = hmStep * scaleFactor;
         var pt0 = gameToContainerPoint(0, islandHeight / 2);
@@ -189,9 +223,9 @@ var GridLayer = L.Layer.extend({
         var currentCellSize = pt1.x - pt0.x;
         var textScale = currentCellSize / baseCellSize;
         
-        var baseFontSize = parseInt(cellCoordFontSize);
+        var baseFontSize = parseInt(conf.cellCoordStyle.fontSize);
         var scaledFontSize = Math.round(baseFontSize * textScale) + "px";
-        var finalCellFont = scaledFontSize + " " + cellCoordFontFamily;
+        var finalCellFont = scaledFontSize + " " + conf.cellCoordStyle.fontFamily;
         
         var finalCellColor = hexToRgba(cellCoordColor, cellCoordOpacity);
         
@@ -220,7 +254,6 @@ var GridLayer = L.Layer.extend({
         }
       }
     }
-    // После отрисовки текста можно восстановить globalAlpha, если требуется (например, 1.0)
     ctx.globalAlpha = 1.0;
     console.log("Отрисовка сетки завершена.");
   }

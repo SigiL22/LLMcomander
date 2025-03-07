@@ -3,7 +3,6 @@ import logging
 import sqlite3
 from flask import Flask, send_from_directory, abort, request, jsonify
 
-# Создаем приложение, указывая папку для статических файлов
 app = Flask(__name__, static_folder="static", static_url_path="")
 
 # Настройка логирования
@@ -30,7 +29,7 @@ def serve_index():
 def get_tile(z, x, y):
     logger.info(f"Запрос тайла: z={z}, x={x}, y={y}")
     if x < 0 or y < 0:
-        logger.error(f"Отрицательные индексы тайла: x={x}, y={y}")
+        logger.error(f"Отрицательные индексы тайла: x={x}, y={y}. Возвращаем прозрачный тайл.")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
         
     tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
@@ -44,16 +43,14 @@ def get_tile(z, x, y):
         return response
     else:
         logger.error(f"Тайл не найден: {tile_path}")
-        # Если тайл не найден, возвращаем прозрачный тайл
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
 
-# Эндпоинт для получения названий из базы данных
 @app.route("/names")
 def get_names():
     db_path = os.path.join("db", "name.db")
     try:
         conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row  # Позволяет обращаться к строкам как к словарям
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT id, name, type, x, y FROM names")
         rows = cur.fetchall()
@@ -62,6 +59,46 @@ def get_names():
         return jsonify(names_list)
     except Exception as e:
         logger.error("Ошибка при чтении базы данных: %s", e)
+        abort(500)
+
+# Новый эндпоинт для обновления существующей надписи
+@app.route("/update_label", methods=["POST"])
+def update_label():
+    data = request.get_json()
+    if not data or "id" not in data or "x" not in data or "y" not in data:
+        abort(400, "Неверные параметры")
+    db_path = os.path.join("db", "name.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("UPDATE names SET x = ?, y = ? WHERE id = ?", (data["x"], data["y"], data["id"]))
+        conn.commit()
+        conn.close()
+        logger.info(f"Надпись id={data['id']} обновлена: x={data['x']}, y={data['y']}")
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error("Ошибка при обновлении надписи: %s", e)
+        abort(500)
+
+# Новый эндпоинт для добавления новой надписи
+@app.route("/add_label", methods=["POST"])
+def add_label():
+    data = request.get_json()
+    if not data or "name" not in data or "type" not in data or "x" not in data or "y" not in data:
+        abort(400, "Неверные параметры")
+    db_path = os.path.join("db", "name.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO names (name, type, x, y) VALUES (?, ?, ?, ?)",
+                    (data["name"], data["type"], data["x"], data["y"]))
+        conn.commit()
+        new_id = cur.lastrowid
+        conn.close()
+        logger.info(f"Добавлена новая надпись id={new_id}: {data}")
+        return jsonify({"status": "success", "id": new_id}), 200
+    except Exception as e:
+        logger.error("Ошибка при добавлении надписи: %s", e)
         abort(500)
 
 if __name__ == "__main__":
