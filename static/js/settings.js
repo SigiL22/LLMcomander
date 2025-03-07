@@ -276,11 +276,14 @@
         nameSettings: newSettings.nameSettings
       };
 
-      Config.set(merged);
-      Config.save();
-      Config.apply();
-      document.body.removeChild(overlay);
-    };
+	Config.set(merged);
+	Config.save();
+	Config.apply();
+	if (namesLayer && typeof namesLayer._createMarkers === "function") {
+		namesLayer._createMarkers(); // Пересоздаем маркеры с новыми стилями
+	}
+	document.body.removeChild(overlay);
+	};
 
     var btnCancel = document.createElement('button');
     btnCancel.innerText = "Отмена";

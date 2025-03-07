@@ -1,6 +1,6 @@
 // js/namesLayer.js
 
-// Функция перевода игровых координат в latlng (используется фиксированный зум 7)
+// Функция перевода игровых координат в LatLng (используется фиксированный зум 7)
 function gameToLatLng(X, Y) {
   var conf = Config.get();
   var px = X * (conf.mapImageWidth / conf.islandWidth);
@@ -8,14 +8,12 @@ function gameToLatLng(X, Y) {
   return map.unproject([px, py], 7);
 }
 
-// Функция для динамического обновления настроек типов на основе полученных надписей.
-// Если для какого-то типа еще нет настроек, создаем их со значениями по умолчанию.
+// Функция для динамического обновления настроек типов на основе полученных надписей
 function updateNameSettingsFromNames(namesArray) {
   var conf = Config.get();
   var settings = conf.nameSettings || {};
-  // Значения по умолчанию для нового типа
   var defaultStyle = {
-    displayName: "", // запишем сам тип
+    displayName: "",
     fontFamily: "sans-serif",
     fontSize: 14,
     color: "#000000",
@@ -36,91 +34,94 @@ function updateNameSettingsFromNames(namesArray) {
 }
 
 var NamesLayer = L.Layer.extend({
+  initialize: function() {
+    this._namesGroup = L.featureGroup(); // Создаем группу для маркеров
+    this._names = [];
+  },
+
   onAdd: function(map) {
     this._map = map;
-    
-    // Создаем canvas для отрисовки надписей
-    this._canvas = L.DomUtil.create('canvas', 'leaflet-names-layer');
-    var size = map.getSize();
-    this._canvas.width = size.x;
-    this._canvas.height = size.y;
-    var pane = map.getPane('overlayPane');
-    pane.appendChild(this._canvas);
-    this._canvas.style.zIndex = 1001;
-    
-    // Подписываемся на события карты для перерисовки
-    map.on('moveend zoomend resize', this._reset, this);
-    
-    // Запрашиваем данные с сервера
-    this._fetchNames();
+    this._namesGroup.addTo(map); // Добавляем группу маркеров на карту
+    map.on('zoomend', this._updateVisibility, this); // Обновляем видимость при зуме
+    this._fetchNames(); // Загружаем данные
   },
+
   onRemove: function(map) {
-    map.getPane('overlayPane').removeChild(this._canvas);
-    map.off('moveend zoomend resize', this._reset, this);
+    map.removeLayer(this._namesGroup); // Удаляем группу маркеров
+    map.off('zoomend', this._updateVisibility, this);
   },
-  _reset: function() {
-    var topLeft = this._map.containerPointToLayerPoint([0, 0]);
-    L.DomUtil.setPosition(this._canvas, topLeft);
-    this._redraw();
-  },
+
   _fetchNames: function() {
     var self = this;
     fetch('/names')
       .then(response => response.json())
       .then(data => {
-         self._names = data;
-         // Динамически обновляем настройки типов надписей
-         updateNameSettingsFromNames(data);
-         self._redraw();
+        self._names = data;
+        updateNameSettingsFromNames(data); // Обновляем настройки типов
+        self._createMarkers(); // Создаем маркеры
       })
       .catch(error => console.error("Ошибка при запросе /names:", error));
   },
-  _redraw: function() {
-    if (!this._names) return;
-    
-    var canvas = this._canvas;
-    var ctx = canvas.getContext('2d');
-    var size = this._map.getSize();
-    ctx.clearRect(0, 0, size.x, size.y);
-    
-    var currentZoom = this._map.getZoom();
-    
-    // Получаем настройки для надписей из Config
+
+  _createMarkers: function() {
+    this._namesGroup.clearLayers(); // Очищаем существующие маркеры
     var conf = Config.get();
     var nameStyles = {};
+
+    // Формируем стили для каждого типа надписей
     for (var t in conf.nameSettings) {
       if (conf.nameSettings.hasOwnProperty(t)) {
         var item = conf.nameSettings[t];
         nameStyles[t] = {
-          font: item.fontSize + "px " + item.fontFamily,
+          font: `${item.fontSize}px ${item.fontFamily}`,
           color: item.color,
-          opacity: item.opacity, // значение в диапазоне 0..1
+          opacity: item.opacity,
           minZoom: item.minZoom
         };
       }
     }
-    
-    // Отрисовка надписей для каждого элемента из базы
+
+    // Создаем маркеры для каждой надписи
     this._names.forEach(function(item) {
       var style = nameStyles[item.type];
       if (!style) {
-         console.log("Стиль не найден для типа:", item.type);
-         return;
+        console.log("Стиль не найден для типа:", item.type);
+        return;
       }
-      if (currentZoom < style.minZoom) return;
-      
-      // Вычисляем latlng через gameToLatLng, затем переводим в container point
+
       var latlng = gameToLatLng(item.x, item.y);
-      var pt = map.latLngToContainerPoint(latlng);
-      
-      ctx.font = style.font;
-      ctx.fillStyle = hexToRgba(style.color, style.opacity);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      
-      ctx.fillText(item.name, pt.x, pt.y);
+      var icon = L.divIcon({
+        className: 'name-label',
+        html: `<div style="font:${style.font};color:${style.color};opacity:${style.opacity};display:flex;align-items:center;justify-content:center;">${item.name}</div>`,
+        iconSize: [100, 30], // Размер иконки
+        iconAnchor: [50, 15] // Центр иконки
+      });
+
+      var marker = L.marker(latlng, { icon: icon });
+      marker.options.minZoom = style.minZoom; // Сохраняем минимальный зум
+      marker.options.data = { id: item.id, name: item.name, type: item.type }; // Сохраняем данные
+      this._namesGroup.addLayer(marker);
+    }, this);
+
+    this._updateVisibility(); // Обновляем видимость сразу после создания
+  },
+
+  _updateVisibility: function() {
+    var currentZoom = this._map.getZoom();
+    this._namesGroup.eachLayer(function(layer) {
+      if (currentZoom >= layer.options.minZoom) {
+        layer.setOpacity(1); // Показываем маркер
+      } else {
+        layer.setOpacity(0); // Скрываем маркер
+      }
     });
-    
-    console.log("Отрисовка надписей завершена");
+  },
+
+  // Метод для обновления слоя (например, после редактирования)
+  update: function() {
+    this._fetchNames();
   }
 });
+
+// Экспорт для доступа из других модулей (например, labelsEditor.js)
+window.namesLayer = new NamesLayer();
