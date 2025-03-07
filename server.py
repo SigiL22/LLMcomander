@@ -1,6 +1,8 @@
 import os
 import logging
 import sqlite3
+import base64
+import os
 from flask import Flask, send_from_directory, abort, request, jsonify
 
 app = Flask(__name__, static_folder="static", static_url_path="")
@@ -11,32 +13,39 @@ logger = logging.getLogger("TileServer")
 
 # Папка с тайлами
 TILES_FOLDER = "maps/chernarus/"
+SNAPSHOTS_FOLDER = "snapshots"
 CACHE_TIMEOUT = 86400  # 24 часа
-
-# Путь к прозрачному тайлу
 TRANSPARENT_TILE = "transparent.png"  # Файл должен находиться в папке static
+
+os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
 @app.before_request
 def log_request_info():
     logger.debug(f"Запрос: {request.method} {request.url} от {request.remote_addr}")
 
-# Маршрут для корневого URL, отдающий index.html из папки static
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
 @app.route("/")
 def serve_index():
     return app.send_static_file("index.html")
 
 @app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
 def get_tile(z, x, y):
-    logger.info(f"Запрос тайла: z={z}, x={x}, y={y}")
+    #logger.info(f"Запрос тайла: z={z}, x={x}, y={y}")
     if x < 0 or y < 0:
-        logger.error(f"Отрицательные индексы тайла: x={x}, y={y}. Возвращаем прозрачный тайл.")
+        logger.error(f"Отрицательные индексы тайла: x={x}, y={y}")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
         
     tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
     tile_filename = f"{y}.png"
     tile_path = os.path.join(tile_dir, tile_filename)
     if os.path.exists(tile_path):
-        logger.debug(f"Отправка файла: {tile_path}")
+        #logger.debug(f"Отправка файла: {tile_path}")
         response = send_from_directory(tile_dir, tile_filename)
         response.cache_control.max_age = CACHE_TIMEOUT
         response.cache_control.public = True
@@ -45,6 +54,25 @@ def get_tile(z, x, y):
         logger.error(f"Тайл не найден: {tile_path}")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
 
+@app.route("/save_snapshot", methods=["POST"])
+def save_snapshot():
+    data = request.get_json()
+    if not data or "image" not in data or "filename" not in data:
+        abort(400, "Неверные параметры")
+    
+    image_data = data["image"].split(',')[1]
+    filename = data["filename"]
+    file_path = os.path.join(SNAPSHOTS_FOLDER, filename)
+    
+    try:
+        with open(file_path, "wb") as f:
+            f.write(base64.b64decode(image_data))
+        logger.info(f"Снимок сохранен: {file_path}")
+        return jsonify({"status": "success", "path": file_path}), 200
+    except Exception as e:
+        logger.error(f"Ошибка сохранения снимка: {e}")
+        abort(500)
+        
 @app.route("/names")
 def get_names():
     db_path = os.path.join("db", "name.db")
@@ -100,6 +128,10 @@ def add_label():
     except Exception as e:
         logger.error("Ошибка при добавлении надписи: %s", e)
         abort(500)
+        
+# Папка для сохранения снимков
+SNAPSHOTS_FOLDER = "snapshots"
+os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
 if __name__ == "__main__":
     logger.info("Запуск сервера TileServer на http://localhost:5000")
