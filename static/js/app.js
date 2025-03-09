@@ -27,23 +27,34 @@ var bounds = new L.LatLngBounds(southWest, northEast);
 
 map.fitBounds(bounds);
 
-var tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
+L.CustomTileLayer = L.TileLayer.extend({
+  createTile: function(coords, done) {
+    if (coords.x < 0 || coords.y < 0) {
+      var tile = document.createElement('img');
+      tile.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='; // Прозрачный 1x1 PNG
+      tile.style.width = '256px';
+      tile.style.height = '256px';
+      setTimeout(function() {
+        done(null, tile);
+      }, 0);
+      return tile;
+    }
+    return L.TileLayer.prototype.createTile.call(this, coords, done);
+  }
+});
+
+// Регистрируем кастомный слой
+L.customTileLayer = function(url, options) {
+  return new L.CustomTileLayer(url, options);
+};
+
+var tileLayer = L.customTileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
   noWrap: true,
   attribution: "Карта Chernarus",
   updateWhenIdle: true,
   tileBuffer: 2,
   maxNativeZoom: 7,
-  maxZoom: 9,
-  getTileUrl: function(coords) {
-    if (coords.x < 0 || coords.y < 0) {
-      return '/transparent.png';
-    }
-    return L.Util.template(this._url, L.extend({
-      z: coords.z,
-      x: coords.x,
-      y: coords.y
-    }, this.options));
-  }
+  maxZoom: 9
 }).addTo(map);
 
 tileLayer.on('loading', function() {

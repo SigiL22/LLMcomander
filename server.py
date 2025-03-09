@@ -2,8 +2,8 @@ import os
 import logging
 import sqlite3
 import base64
-import os
 from flask import Flask, send_from_directory, abort, request, jsonify
+import arma_connector  # Импортируем новый модуль
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -36,7 +36,6 @@ def serve_index():
 
 @app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
 def get_tile(z, x, y):
-    #logger.info(f"Запрос тайла: z={z}, x={x}, y={y}")
     if x < 0 or y < 0:
         logger.error(f"Отрицательные индексы тайла: x={x}, y={y}")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
@@ -45,7 +44,6 @@ def get_tile(z, x, y):
     tile_filename = f"{y}.png"
     tile_path = os.path.join(tile_dir, tile_filename)
     if os.path.exists(tile_path):
-        #logger.debug(f"Отправка файла: {tile_path}")
         response = send_from_directory(tile_dir, tile_filename)
         response.cache_control.max_age = CACHE_TIMEOUT
         response.cache_control.public = True
@@ -89,7 +87,6 @@ def get_names():
         logger.error("Ошибка при чтении базы данных: %s", e)
         abort(500)
 
-# Новый эндпоинт для обновления существующей надписи
 @app.route("/update_label", methods=["POST"])
 def update_label():
     data = request.get_json()
@@ -108,7 +105,6 @@ def update_label():
         logger.error("Ошибка при обновлении надписи: %s", e)
         abort(500)
 
-# Новый эндпоинт для добавления новой надписи
 @app.route("/add_label", methods=["POST"])
 def add_label():
     data = request.get_json()
@@ -128,10 +124,27 @@ def add_label():
     except Exception as e:
         logger.error("Ошибка при добавлении надписи: %s", e)
         abort(500)
-        
-# Папка для сохранения снимков
-SNAPSHOTS_FOLDER = "snapshots"
-os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
+
+# Новый эндпоинт для получения данных от ARMA 3
+@app.route("/arma_data", methods=["GET"])
+def get_arma_data():
+    with arma_connector.data_lock:
+        if arma_connector.arma_data is None:
+            return jsonify({"status": "no_data"}), 200
+        return jsonify({"status": "success", "data": arma_connector.arma_data}), 200
+
+# Новый эндпоинт для отправки данных в ARMA 3
+@app.route("/send_to_arma", methods=["POST"])
+def send_to_arma_endpoint():
+    data = request.get_json()
+    if not data:
+        abort(400, "Неверные параметры")
+    try:
+        arma_connector.send_to_arma(data)
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Ошибка при отправке в ARMA: {e}")
+        abort(500)
 
 if __name__ == "__main__":
     logger.info("Запуск сервера TileServer на http://localhost:5000")
