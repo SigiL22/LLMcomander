@@ -25,7 +25,6 @@ function updateNameSettingsFromNames(namesArray) {
       var newStyle = Object.assign({}, defaultStyle);
       newStyle.displayName = item.type;
       settings[item.type] = newStyle;
-      console.log("Добавлен новый тип в конфигурацию:", item.type, newStyle);
     }
   });
   conf.nameSettings = settings;
@@ -43,12 +42,14 @@ var NamesLayer = L.Layer.extend({
     this._map = map;
     this._namesGroup.addTo(map); // Добавляем группу маркеров на карту
     map.on('zoomend', this._updateVisibility, this); // Обновляем видимость при зуме
+    map.on('moveend resize', this._updateMarkers, this); // Обновляем маркеры при перемещении и изменении размера
     this._fetchNames(); // Загружаем данные
   },
 
   onRemove: function(map) {
     map.removeLayer(this._namesGroup); // Удаляем группу маркеров
     map.off('zoomend', this._updateVisibility, this);
+    map.off('moveend resize', this._updateMarkers, this);
   },
 
   _fetchNames: function() {
@@ -60,7 +61,7 @@ var NamesLayer = L.Layer.extend({
         updateNameSettingsFromNames(data); // Обновляем настройки типов
         self._createMarkers(); // Создаем маркеры
       })
-      .catch(error => console.error("Ошибка при запросе /names:", error));
+      .catch(error => console.error("[NamesLayer] Ошибка при запросе /names:", error));
   },
 
   _createMarkers: function() {
@@ -85,11 +86,22 @@ var NamesLayer = L.Layer.extend({
     this._names.forEach(function(item) {
       var style = nameStyles[item.type];
       if (!style) {
-        console.log("Стиль не найден для типа:", item.type);
         return;
       }
 
       var latlng = gameToLatLng(item.x, item.y);
+      var containerPoint = map.latLngToContainerPoint(latlng); // Преобразуем в контейнерные координаты
+      var topStripeHeight = 35; // Высота верхней окантовки из gridLayer.js
+      var leftStripeWidth = 40; // Ширина левой окантовки из gridLayer.js
+
+      // Проверяем, попадает ли маркер в область окантовки
+      var isInTopStripe = containerPoint.y <= topStripeHeight;
+      var isInLeftStripe = containerPoint.x <= leftStripeWidth;
+
+      if (isInTopStripe || isInLeftStripe) {
+        return; // Пропускаем маркер, если он в окантовке
+      }
+
       var icon = L.divIcon({
         className: 'name-label',
         html: `<div style="font:${style.font};color:${style.color};opacity:${style.opacity};display:flex;align-items:center;justify-content:center;">${item.name}</div>`,
@@ -104,6 +116,10 @@ var NamesLayer = L.Layer.extend({
     }, this);
 
     this._updateVisibility(); // Обновляем видимость сразу после создания
+  },
+
+  _updateMarkers: function() {
+    this._createMarkers(); // Пересоздаём маркеры при изменении вида карты
   },
 
   _updateVisibility: function() {

@@ -14,7 +14,7 @@ var islandWidth = conf.islandWidth,
 var map = L.map('map', {
   crs: L.CRS.Simple,
   minZoom: 2,
-  maxZoom: 9,
+  maxZoom: conf.maxZoom,
   updateWhenIdle: true,
   updateWhenZooming: false,
   zoomControl: false,

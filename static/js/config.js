@@ -7,6 +7,7 @@ var Config = (function(){
     islandHeight: 15360,
     mapImageWidth: 32768,
     mapImageHeight: 32768,
+	maxZoom: 9,            // Максимальный зум
     // Интервалы для сетки
     kmStep: 1000,   // километровая сетка (1000 м)
     hmStep: 100,    // сотометровая сетка (100 м)

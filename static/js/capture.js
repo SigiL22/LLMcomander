@@ -1,195 +1,297 @@
 // js/capture.js
 
-function captureMapArea(xxx, yyy, m, num) {
+function openMapWindow(xxx, yyy, m, showCellLabels = true) {
   // Константы
+  const conf = Config.get();
   const CELL_SIZE = 100; // Размер ячейки в метрах
-  const MAX_ZOOM = 9;    // Максимальный зум
-  const MAX_RESOLUTION = 1572; // Максимальное разрешение в пикселях
-  const BORDER_OFFSET = 50; // Дополнительное пространство для окантовки (в пикселях)
+  const MAX_ZOOM = conf.maxZoom || 9; // По умолчанию 9, если не указано
+  const MAP_SIZE_METERS = conf.islandWidth || 15360; // Размер карты в метрах
+  const MAP_SIZE_PIXELS_ZOOM_7 = conf.mapImageWidth || 32768; // Размер карты в пикселей на зуме 7
+  const PIXELS_PER_METER_ZOOM_7 = MAP_SIZE_PIXELS_ZOOM_7 / MAP_SIZE_METERS; // Динамически вычисляем
+  const MAX_WINDOW_SIZE = 1500; // Максимальный размер окна (ширина и высота) остаётся фиксированным
+  const WINDOW_MARGIN = 0.1; // Дополнительный запас 10% слева и сверху
 
-  console.log(`Запуск captureMapArea: xxx=${xxx}, yyy=${yyy}, m=${m}, num=${num}`);
+  console.log(`[openMapWindow] Запуск функции: xxx=${xxx}, yyy=${yyy}, m=${m}, showCellLabels=${showCellLabels}`);
 
-  // Преобразуем координаты ячейки в игровые метры (левый нижний угол)
-  const centerX = xxx * CELL_SIZE;
-  const centerY = yyy * CELL_SIZE;
+  // Преобразуем координаты ячейки в игровые метры (центр ячейки)
+  const centerX = xxx * CELL_SIZE + CELL_SIZE / 2; // Центр ячейки (например, 27 * 100 + 50 = 2750)
+  const centerY = yyy * CELL_SIZE + CELL_SIZE / 2; // Центр ячейки (например, 53 * 100 + 50 = 5350)
+  console.log(`[openMapWindow] Центр в метрах: centerX=${centerX}, centerY=${centerY}`);
 
   // Рассчитываем размеры области
-  const areaCells = 2 * m + 1;
-  const areaMeters = m * CELL_SIZE; // Половина ширины/высоты области
-
-  // Определяем симметричные границы
+  const areaCells = 2 * m + 1; // Количество ячеек по оси (например, m=5 → 11x11 ячеек)
+  const areaMeters = (areaCells * CELL_SIZE) / 2; // Половина ширины/высоты области в метрах
   const minX = centerX - areaMeters;
   const maxX = centerX + areaMeters;
   const minY = centerY - areaMeters;
   const maxY = centerY + areaMeters;
+  console.log(`[openMapWindow] Границы области: minX=${minX}, maxX=${maxX}, minY=${minY}, maxY=${maxY}`);
 
   // Преобразуем в LatLng
   const sw = gameToLatLng(minX, minY);
   const ne = gameToLatLng(maxX, maxY);
   const bounds = L.latLngBounds(sw, ne);
+  console.log(`[openMapWindow] Границы в LatLng: SW=${JSON.stringify(sw)}, NE=${JSON.stringify(ne)}`);
 
-  // Временное включение подписей ячеек
-  const conf = Config.get();
-  const originalShowCellCoords = conf.cellCoordStyle.show;
-  if (num) {
-    conf.cellCoordStyle.show = true;
-    Config.set(conf);
-    if (window.gridLayer && typeof gridLayer._redraw === "function") {
-      gridLayer._redraw();
-    }
-  }
+  // Инициализируем временную карту для расчёта зума
+  const tempMap = L.map(document.createElement('div'), {
+    crs: L.CRS.Simple,
+    minZoom: 2,
+    maxZoom: MAX_ZOOM
+  });
+  console.log(`[openMapWindow] Временная карта создана для расчёта зума`);
 
-  // Устанавливаем зум
+  // Рассчитываем зум и размер окна
   let zoom = MAX_ZOOM;
-  map.setView(bounds.getCenter(), zoom);
-  let pixelWidth = Math.abs(map.project(ne, zoom).x - map.project(sw, zoom).x);
-  let pixelHeight = Math.abs(map.project(ne, zoom).y - map.project(sw, zoom).y);
+  let pixelsPerMeter = PIXELS_PER_METER_ZOOM_7 * Math.pow(2, zoom - 7);
+  const areaWidthMeters = maxX - minX; // Например, 1100 метров для m=5
+  const areaHeightMeters = maxY - minY;
+  let pixelWidth = areaWidthMeters * pixelsPerMeter;
+  let pixelHeight = areaHeightMeters * pixelsPerMeter;
 
-  while ((pixelWidth > MAX_RESOLUTION || pixelHeight > MAX_RESOLUTION) && zoom > 2) {
+  // Уменьшаем зум, пока область не уместится в окно
+  let windowWidth = pixelWidth + (pixelWidth * WINDOW_MARGIN); // Запас только слева
+  let windowHeight = pixelHeight + (pixelHeight * WINDOW_MARGIN); // Запас только сверху
+  while ((windowWidth > MAX_WINDOW_SIZE || windowHeight > MAX_WINDOW_SIZE) && zoom > 2) {
     zoom--;
-    map.setZoom(zoom);
-    pixelWidth = Math.abs(map.project(ne, zoom).x - map.project(sw, zoom).x);
-    pixelHeight = Math.abs(map.project(ne, zoom).y - map.project(sw, zoom).y);
+    pixelsPerMeter = PIXELS_PER_METER_ZOOM_7 * Math.pow(2, zoom - 7);
+    pixelWidth = areaWidthMeters * pixelsPerMeter;
+    pixelHeight = areaHeightMeters * pixelsPerMeter;
+    windowWidth = pixelWidth + (pixelWidth * WINDOW_MARGIN);
+    windowHeight = pixelHeight + (pixelHeight * WINDOW_MARGIN);
   }
 
-  // Увеличиваем область захвата, чтобы включить окантовку
-  pixelWidth = 960 + BORDER_OFFSET * 2; // Добавляем место для окантовки слева и справа
-  pixelHeight = 960 + BORDER_OFFSET * 2; // Добавляем место для окантовки сверху и снизу
+  // Ограничиваем максимальный размер
+  windowWidth = Math.min(windowWidth, MAX_WINDOW_SIZE);
+  windowHeight = Math.min(windowHeight, MAX_WINDOW_SIZE);
+  console.log(`[openMapWindow] Окончательный размер окна: ${windowWidth}x${windowHeight} пикселей`);
 
-  console.log(`Выбранный зум: ${zoom}, размер области: ${pixelWidth}x${pixelHeight} пикселей`);
-  map.fitBounds(bounds);
+  // Открываем новое окно с динамическими размерами
+  const mapWindow = window.open('', 'MapWindow', `width=${windowWidth},height=${windowHeight}`);
+  console.log(`[openMapWindow] Новое окно открыто`);
 
-  // Ожидаем загрузки тайлов
-  const waitForTiles = new Promise((resolve) => {
-    let tileLayer;
-    map.eachLayer(layer => {
-      if (layer instanceof L.TileLayer) {
-        tileLayer = layer;
-      }
-    });
+  // Загружаем HTML с картой в новое окно
+  mapWindow.document.write(`
+    <html>
+      <head>
+        <title>Map Preview</title>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+        <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+        <script src="js/config.js"></script> <!-- Настройки -->
+        <script src="js/gameToLatLng.js"></script> <!-- Функция преобразования координат -->
+        <script src="js/gridLayer.js"></script> <!-- Слой сетки -->
+        <script src="js/namesLayer.js"></script> <!-- Слой надписей -->
+        <style>
+          #map { width: 100%; height: 100%; }
+          body { margin: 0; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          // Функция для перенаправления логов в консоль родительского окна
+          function logToParent(...args) {
+            if (window.opener && window.opener.console) {
+              window.opener.console.log('[MapWindow]', ...args);
+            } else {
+              console.log('[MapWindow]', ...args); // Лог в консоль текущего окна
+            }
+          }
 
-    if (!tileLayer) {
-      console.log("Слой тайлов не найден, продолжаем");
-      resolve();
-      return;
-    }
+          // Загружаем настройки
+          Config.load();
+          var conf = Config.get();
 
-    let loaded = false;
-    tileLayer.on('tileload', () => {
-      console.log("Тайлы загружены (tileload)");
-      loaded = true;
-      setTimeout(resolve, 2000); // Задержка для рендеринга
-    });
+          // Устанавливаем отображение подписей ячеек
+          conf.cellCoordStyle.show = ${showCellLabels};
+          Config.set(conf);
 
-    tileLayer.on('tileerror', () => {
-      console.warn("Ошибка загрузки тайлов, продолжаем");
-      resolve();
-    });
+          // Инициализируем карту
+          var map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: 2,
+            maxZoom: conf.maxZoom || 9,
+            updateWhenIdle: true,
+            updateWhenZooming: false,
+            zoomControl: false,
+            doubleClickZoom: false
+          });
 
-    tileLayer.redraw(); // Принудительно обновляем тайлы
+          // Добавляем слой тайлов
+          var tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
+            noWrap: true,
+            attribution: "Карта Chernarus",
+            updateWhenIdle: true,
+            tileBuffer: 2,
+            maxNativeZoom: 7,
+            maxZoom: conf.maxZoom || 9,
+            bounds: [[-32768, -32768], [32768, 32768]], // Ограничиваем запросы
+            getTileUrl: function(coords) {
+              if (coords.x < 0 || coords.y < 0) {
+                return '/transparent.png';
+              }
+              return L.Util.template(this._url, L.extend({
+                z: coords.z,
+                x: coords.x,
+                y: coords.y
+              }, this.options));
+            }
+          }).addTo(map);
 
-    setTimeout(() => {
-      if (!loaded) {
-        console.log("Тайлы не загрузились за 20 секунд, продолжаем");
-        resolve();
-      }
-    }, 20000);
-  });
+          tileLayer.on('tileerror', function(error) {
+            logToParent('Ошибка загрузки тайла:', error.tile.src, 'Ошибка:', error.error);
+          });
 
-  // Захват после загрузки
-  waitForTiles.then(() => {
-    const mapElement = document.getElementById('map');
-    const mapSize = map.getSize();
-    const centerLatLng = bounds.getCenter();
-    const centerPixel = map.project(centerLatLng, zoom);
-    const pixelBounds = map.getPixelBounds();
+          // Добавляем слой сетки
+          var gridLayer = new GridLayer();
+          gridLayer.addTo(map);
 
-    // Корректируем центр с учётом смещения на пол-ячейки (50 метров)
-    const halfCellPixelX = map.project(gameToLatLng(centerX + 50, centerY)).x - centerPixel.x;
-    const halfCellPixelY = map.project(gameToLatLng(centerX, centerY + 50)).y - centerPixel.y;
-    const correctedCenterPixelX = centerPixel.x + halfCellPixelX * 0.5; // Компенсация на 0.5 ячейки
-    const correctedCenterPixelY = centerPixel.y + halfCellPixelY * 0.5;
+          // Добавляем слой надписей
+          var namesLayer = new NamesLayer();
+          namesLayer.addTo(map);
 
-    // Рассчитываем координаты захвата относительно корректированного центра
-    const offsetX = correctedCenterPixelX - (pixelWidth / 2) - pixelBounds.min.x;
-    const offsetY = correctedCenterPixelY - (pixelHeight / 2) - pixelBounds.min.y;
+          // Устанавливаем центр и зум
+          const centerLatLng = gameToLatLng(${centerX}, ${centerY});
 
-    // Корректируем, чтобы оставаться в пределах контейнера, с учётом окантовки
-    const correctedOffsetX = Math.max(-BORDER_OFFSET, Math.min(offsetX, mapSize.x - pixelWidth + BORDER_OFFSET));
-    const correctedOffsetY = Math.max(-BORDER_OFFSET, Math.min(offsetY, mapSize.y - pixelHeight + BORDER_OFFSET));
+          // Устанавливаем зум и границы
+          map.setView(centerLatLng, ${zoom});
+          map.fitBounds([
+            gameToLatLng(${minX}, ${minY}),
+            gameToLatLng(${maxX}, ${maxY})
+          ], { animate: false, padding: [0, 0] });
 
-    console.log(`Захват области: x=${correctedOffsetX}, y=${correctedOffsetY}, width=${pixelWidth}, height=${pixelHeight}`);
-    console.log(`Размер карты: ${mapSize.x}x${mapSize.y}, pixelBounds: min=${pixelBounds.min.x},${pixelBounds.min.y}, max=${pixelBounds.max.x},${pixelBounds.max.y}`);
+          // Корректируем размер окна на основе реального зума
+          const finalZoom = map.getZoom();
+          const finalPixelsPerMeter = ${PIXELS_PER_METER_ZOOM_7} * Math.pow(2, finalZoom - 7);
+          const finalPixelWidth = ${areaWidthMeters} * finalPixelsPerMeter;
+          const finalPixelHeight = ${areaHeightMeters} * finalPixelsPerMeter;
+          let adjustedWindowWidth = finalPixelWidth + (finalPixelWidth * ${WINDOW_MARGIN});
+          let adjustedWindowHeight = finalPixelHeight + (finalPixelHeight * ${WINDOW_MARGIN});
+          adjustedWindowWidth = Math.min(adjustedWindowWidth, ${MAX_WINDOW_SIZE});
+          adjustedWindowHeight = Math.min(adjustedWindowHeight, ${MAX_WINDOW_SIZE});
+          if (adjustedWindowWidth !== ${windowWidth} || adjustedWindowHeight !== ${windowHeight}) {
+            window.resizeTo(adjustedWindowWidth, adjustedWindowHeight);
+            map.fitBounds([
+              gameToLatLng(${minX}, ${minY}),
+              gameToLatLng(${maxX}, ${maxY})
+            ], { animate: false, padding: [0, 0] });
+          }
 
-    // Проверяем загруженные тайлы
-    const tileImages = mapElement.querySelectorAll('.leaflet-tile-pane img');
-    tileImages.forEach(img => console.log(`Тайл: ${img.src}, загружен: ${img.complete}, размер: ${img.naturalWidth}x${img.naturalHeight}`));
+          // Применяем настройки и обновляем сетку с небольшой задержкой
+          Config.apply();
+          setTimeout(() => {
+            if (gridLayer && typeof gridLayer._redraw === "function") {
+              gridLayer._redraw();
+            }
+          }, 100);
 
-    html2canvas(mapElement, {
-      useCORS: true,
-      width: pixelWidth,
-      height: pixelHeight,
-      x: correctedOffsetX,
-      y: correctedOffsetY,
-      logging: true,
-      onclone: (doc) => {
-        const clonedMap = doc.getElementById('map');
-        clonedMap.style.backgroundColor = '#fff';
-        const tilePane = clonedMap.querySelector('.leaflet-tile-pane');
-        const overlayPane = clonedMap.querySelector('.leaflet-overlay-pane');
-        if (tilePane && overlayPane) {
-          tilePane.style.opacity = '1'; // Устанавливаем непрозрачность тайлов
-          overlayPane.appendChild(tilePane); // Переносим тайлы в overlayPane
-        }
-        clonedMap.querySelectorAll('.leaflet-layer, .leaflet-overlay-pane').forEach(layer => {
-          layer.style.transform = 'none';
-        });
-        // Явно включаем слои сетки
-        const gridLayers = clonedMap.querySelectorAll('.leaflet-grid-layer');
-        gridLayers.forEach(layer => {
-          layer.style.display = 'block';
-          layer.style.opacity = '0.5'; // Прозрачность сетки
-          layer.style.zIndex = '1000'; // Сетка поверх
-          console.log('Слой сетки найден:', layer);
-        });
-        // Проверяем содержимое overlayPane
-        console.log('Содержимое overlayPane:', overlayPane.innerHTML);
-      }
-    }).then(canvas => {
-      const dataUrl = canvas.toDataURL('image/png');
-      console.log("Снимок создан, размер:", canvas.width, "x", canvas.height);
+          // Добавляем обработчики событий для обновления сетки
+          map.on('zoomend moveend resize', function() {
+            if (gridLayer && typeof gridLayer._redraw === "function") {
+              gridLayer._redraw();
+            }
+          });
 
-      // Временно добавляем canvas на страницу для проверки
-      document.body.appendChild(canvas);
-      canvas.style.position = 'absolute';
-      canvas.style.top = '10px';
-      canvas.style.left = '10px';
-      canvas.style.border = '1px solid red';
+          // Захват карты и сохранение в файл
+          const waitForTiles = new Promise((resolve) => {
+            let tileLayer;
+            map.eachLayer(layer => {
+              if (layer instanceof L.TileLayer) {
+                tileLayer = layer;
+              }
+            });
 
-      fetch('/save_snapshot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: dataUrl,
-          filename: `snapshot_${xxx}_${yyy}_m${m}_z${zoom}.png`
-        })
-      })
-      .then(response => response.json())
-      .then(result => {
-        console.log("Снимок сохранен:", result);
-      })
-      .catch(err => console.error("Ошибка сохранения снимка:", err));
+            if (!tileLayer) {
+              logToParent('Слой тайлов не найден, продолжаем');
+              resolve();
+              return;
+            }
 
-      // Восстанавливаем настройки
-      if (num) {
-        conf.cellCoordStyle.show = originalShowCellCoords;
-        Config.set(conf);
-        if (window.gridLayer && typeof gridLayer._redraw === "function") {
-          gridLayer._redraw();
-        }
-      }
-    }).catch(err => console.error("Ошибка создания снимка:", err));
-  });
+            // Отслеживаем количество загруженных и ошибочных тайлов
+            let tilesLoaded = 0;
+            let tilesErrored = 0;
+            const totalTilesExpected = Object.keys(tileLayer._tiles).length || 0;
+
+            tileLayer.on('tileload', () => {
+              tilesLoaded++;
+              if (tilesLoaded + tilesErrored === totalTilesExpected) {
+                logToParent('Все запросы на тайлы завершены');
+                setTimeout(resolve, 1000); // Задержка для рендеринга
+              }
+            });
+
+            tileLayer.on('tileerror', () => {
+              tilesErrored++;
+              if (tilesLoaded + tilesErrored === totalTilesExpected) {
+                logToParent('Все запросы на тайлы завершены');
+                setTimeout(resolve, 1000); // Задержка для рендеринга
+              }
+            });
+
+            tileLayer.redraw(); // Принудительно обновляем тайлы
+          });
+
+          // Захват после загрузки
+          waitForTiles.then(() => {
+            const mapElement = document.getElementById('map');
+            const mapSize = map.getSize();
+
+            html2canvas(mapElement, {
+              useCORS: true,
+              width: mapSize.x,
+              height: mapSize.y,
+              backgroundColor: null,
+              onclone: (doc) => {
+                const clonedMap = doc.getElementById('map');
+                clonedMap.style.backgroundColor = '#fff';
+                const tilePane = clonedMap.querySelector('.leaflet-tile-pane');
+                const overlayPane = clonedMap.querySelector('.leaflet-overlay-pane');
+                if (tilePane && overlayPane) {
+                  tilePane.style.opacity = '1';
+                  overlayPane.appendChild(tilePane);
+                }
+                clonedMap.querySelectorAll('.leaflet-layer, .leaflet-overlay-pane').forEach(layer => {
+                  layer.style.transform = 'none';
+                  layer.style.opacity = '1';
+                });
+                const gridLayers = clonedMap.querySelectorAll('.leaflet-grid-layer');
+                gridLayers.forEach(layer => {
+                  layer.style.display = 'block';
+                  layer.style.zIndex = '1000';
+                });
+              }
+            }).then(canvas => {
+              const dataUrl = canvas.toDataURL('image/png');
+
+              fetch('/save_snapshot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  image: dataUrl,
+                  filename: \`snapshot_${xxx}_${yyy}_m${m}_z\${finalZoom}.png\`
+                })
+              })
+              .then(response => response.json())
+              .then(result => {
+                logToParent('Снимок сохранен');
+                window.close();
+              })
+              .catch(err => {
+                logToParent('Ошибка сохранения снимка:', err);
+                window.close();
+              });
+            }).catch(err => {
+              logToParent('Ошибка создания снимка:', err);
+              window.close();
+            });
+          });
+        </script>
+      </body>
+    </html>
+  `);
+
+  return mapWindow;
 }
 
-window.captureMapArea = captureMapArea;
+window.openMapWindow = openMapWindow;

@@ -102,7 +102,11 @@ var GridLayer = L.Layer.extend({
     var leftStripeX = (visibleLeft > 0) ? visibleLeft - leftStripeWidth : 0;
     ctx.fillRect(visibleLeft, topStripeY, visibleRight - visibleLeft, topStripeHeight);
     ctx.fillRect(leftStripeX, visibleTop, leftStripeWidth, visibleBottom - visibleTop);
+    // Явный сброс прозрачности после окантовки
     ctx.globalAlpha = 1.0;
+
+    // Сохраняем текущую прозрачность перед отрисовкой линий
+    var originalAlpha = ctx.globalAlpha;
 
     // Отрисовка километровых линий (вертикальные)
     ctx.strokeStyle = kmLineStyle.color;
@@ -134,9 +138,14 @@ var GridLayer = L.Layer.extend({
       ctx.lineTo(visibleRight, pt.y);
       ctx.stroke();
     }
-    ctx.globalAlpha = 1.0;
+
+    // Восстанавливаем прозрачность после километровых линий
+    ctx.globalAlpha = originalAlpha;
 
     if (drawHm) {
+      // Сохраняем прозрачность перед отрисовкой сотометровых линий
+      originalAlpha = ctx.globalAlpha;
+
       ctx.strokeStyle = hmLineStyle.color;
       ctx.lineWidth = hmLineStyle.weight;
       ctx.globalAlpha = hmLineStyle.opacity;
@@ -171,10 +180,15 @@ var GridLayer = L.Layer.extend({
         ctx.lineTo(visibleRight, pt.y);
         ctx.stroke();
       }
-      ctx.globalAlpha = 1.0;
+
+      // Восстанавливаем прозрачность после сотометровых линий
+      ctx.globalAlpha = originalAlpha;
     }
 
-    // Отрисовка подписей (сброс прозрачности для текста)
+    // Отрисовка подписей (устанавливаем прозрачность явно)
+    console.log("Прозрачность подписей по краю (labelOpacity): " + labelOpacity);
+    // Сбрасываем прозрачность перед установкой labelOpacity
+    ctx.globalAlpha = 1.0;
     ctx.globalAlpha = labelOpacity;
     ctx.fillStyle = labelColor;
     ctx.font = labelFont;
@@ -185,7 +199,7 @@ var GridLayer = L.Layer.extend({
       for (var x = 0; x <= islandWidth; x += kmStep) {
         var midX = x + kmStep / 2;
         var pt = gameToContainerPoint(midX, islandHeight / 2);
-        var labelY = topStripeY + topStripeHeight / 2;
+        var labelY = topStripeY + topStripeHeight / 2; // Смещаем подписи поверх окантовки
         var cellIndex = Math.floor(x / hmStep);
         var label = cellIndex.toString().padStart(3, '0');
         ctx.fillText(label, pt.x, labelY);
@@ -193,7 +207,7 @@ var GridLayer = L.Layer.extend({
       for (var y = 0; y <= islandHeight; y += kmStep) {
         var midY = y + kmStep / 2;
         var pt = gameToContainerPoint(islandWidth / 2, midY);
-        var labelX = leftStripeX + leftStripeWidth / 2;
+        var labelX = leftStripeX + leftStripeWidth / 2; // Смещаем подписи поверх окантовки
         var cellIndex = Math.floor(y / hmStep);
         var label = cellIndex.toString().padStart(3, '0');
         ctx.fillText(label, labelX, pt.y);
@@ -202,7 +216,7 @@ var GridLayer = L.Layer.extend({
       for (var x = 0; x <= islandWidth; x += hmStep) {
         var midX = x + hmStep / 2;
         var pt = gameToContainerPoint(midX, islandHeight / 2);
-        var labelY = topStripeY + topStripeHeight / 2;
+        var labelY = topStripeY + topStripeHeight / 2; // Смещаем подписи поверх окантовки
         var cellIndex = Math.floor(x / hmStep);
         var label = cellIndex.toString().padStart(3, '0');
         ctx.fillText(label, pt.x, labelY);
@@ -210,7 +224,7 @@ var GridLayer = L.Layer.extend({
       for (var y = 0; y <= islandHeight; y += hmStep) {
         var midY = y + hmStep / 2;
         var pt = gameToContainerPoint(islandWidth / 2, midY);
-        var labelX = leftStripeX + leftStripeWidth / 2;
+        var labelX = leftStripeX + leftStripeWidth / 2; // Смещаем подписи поверх окантовки
         var cellIndex = Math.floor(y / hmStep);
         var label = cellIndex.toString().padStart(3, '0');
         ctx.fillText(label, labelX, pt.y);
@@ -254,6 +268,7 @@ var GridLayer = L.Layer.extend({
         }
       }
     }
+    // Завершающий сброс прозрачности
     ctx.globalAlpha = 1.0;
     console.log("Отрисовка сетки завершена.");
   }
