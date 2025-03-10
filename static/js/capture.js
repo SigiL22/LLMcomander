@@ -1,13 +1,13 @@
 // js/capture.js
 
-function openMapWindow(xxx, yyy, m, showCellLabels = true) {
+function openMapWindow(xxx, yyy, m, showCellLabels = false) {
   const conf = Config.get();
   const CELL_SIZE = 100;
   const MAX_ZOOM = conf.maxZoom || 9;
   const MAP_SIZE_METERS = conf.islandWidth || 15360;
   const MAP_SIZE_PIXELS_ZOOM_7 = conf.mapImageWidth || 32768;
   const PIXELS_PER_METER_ZOOM_7 = MAP_SIZE_PIXELS_ZOOM_7 / MAP_SIZE_METERS;
-  const MAX_WINDOW_SIZE = 1050;
+  const MAX_WINDOW_SIZE = 1400;
   const WINDOW_MARGIN = 0.1;
   const TILE_LOAD_TIMEOUT = 5000;
 

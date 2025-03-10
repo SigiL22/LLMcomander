@@ -3,7 +3,7 @@ import logging
 import sqlite3
 import base64
 from flask import Flask, send_from_directory, abort, request, jsonify
-import arma_connector  # Импортируем модуль, который теперь поддерживает DLL
+import arma_connector
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -11,13 +11,21 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("TileServer")
 
-# Папка с тайлами
+# Папка с тайлами и прочие константы
 TILES_FOLDER = "maps/chernarus/"
 SNAPSHOTS_FOLDER = "snapshots"
-CACHE_TIMEOUT = 86400  # 24 часа
-TRANSPARENT_TILE = "transparent.png"  # Файл должен находиться в папке static
-
+CACHE_TIMEOUT = 86400
+TRANSPARENT_TILE = "transparent.png"
 os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
+
+@app.route("/arma_data", methods=["GET"])
+def get_arma_data():
+    with arma_connector.lock:
+        if arma_connector.data is None:
+            logger.info("GET /arma_data: No data available")
+            return jsonify({"status": "no_data"}), 200
+        logger.info(f"GET /arma_data: Sending data - {arma_connector.data}")
+        return jsonify({"status": "success", "data": arma_connector.data}), 200
 
 @app.before_request
 def log_request_info():
@@ -125,13 +133,6 @@ def add_label():
         logger.error("Ошибка при добавлении надписи: %s", e)
         abort(500)
 
-@app.route("/arma_data", methods=["GET"])
-def get_arma_data():
-    with arma_connector.data_lock:
-        if arma_connector.arma_data is None:
-            return jsonify({"status": "no_data"}), 200
-        return jsonify({"status": "success", "data": arma_connector.arma_data}), 200
-
 @app.route("/send_to_arma", methods=["POST"])
 def send_to_arma_endpoint():
     data = request.get_json()
@@ -158,5 +159,7 @@ def send_callback_endpoint():
         abort(500)
 
 if __name__ == "__main__":
+    import threading
+    threading.Thread(target=arma_connector.run_server, daemon=True).start()
     logger.info("Запуск сервера TileServer на http://localhost:5000")
     app.run(debug=True, port=5000)
