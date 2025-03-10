@@ -3,7 +3,7 @@ import logging
 import sqlite3
 import base64
 from flask import Flask, send_from_directory, abort, request, jsonify
-import arma_connector  # Импортируем новый модуль
+import arma_connector  # Импортируем модуль, который теперь поддерживает DLL
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -125,7 +125,6 @@ def add_label():
         logger.error("Ошибка при добавлении надписи: %s", e)
         abort(500)
 
-# Новый эндпоинт для получения данных от ARMA 3
 @app.route("/arma_data", methods=["GET"])
 def get_arma_data():
     with arma_connector.data_lock:
@@ -133,7 +132,6 @@ def get_arma_data():
             return jsonify({"status": "no_data"}), 200
         return jsonify({"status": "success", "data": arma_connector.arma_data}), 200
 
-# Новый эндпоинт для отправки данных в ARMA 3
 @app.route("/send_to_arma", methods=["POST"])
 def send_to_arma_endpoint():
     data = request.get_json()
@@ -144,6 +142,19 @@ def send_to_arma_endpoint():
         return jsonify({"status": "success"}), 200
     except Exception as e:
         logger.error(f"Ошибка при отправке в ARMA: {e}")
+        abort(500)
+
+# Новый эндпоинт для отправки callback-сообщений в ARMA через DLL
+@app.route("/send_callback", methods=["POST"])
+def send_callback_endpoint():
+    data = request.get_json()
+    if not data:
+        abort(400, "Неверные параметры")
+    try:
+        arma_connector.send_callback_to_arma(data)
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Ошибка при отправке callback в ARMA: {e}")
         abort(500)
 
 if __name__ == "__main__":

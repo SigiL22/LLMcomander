@@ -51,8 +51,25 @@ def send_to_arma(message):
     except Exception as e:
         logger.error(f"Error sending to ARMA: {e}")
 
-# Запуск сервера в отдельном потоке при импорте модуля
+def send_callback_to_arma(message):
+    """
+    Отправляет данные для обратного вызова в ARMA на порт 12347.
+    Это используется DLL для асинхронного уведомления игры.
+    """
+    try:
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(('127.0.0.1', 12347))
+        json_data = json.dumps(message) if isinstance(message, dict) else str(message)
+        client.send(json_data.encode('utf-8'))
+        client.close()
+        logger.info(f"Sent callback to ARMA: {json_data}")
+    except Exception as e:
+        logger.error(f"Error sending callback to ARMA: {e}")
+
+# Запуск сервера для приема данных от ARMA в отдельном потоке
 threading.Thread(target=run_server, daemon=True).start()
 
 if __name__ == "__main__":
+    # Тестовые вызовы
     send_to_arma({"command": "test", "data": "Hello from Python"})
+    send_callback_to_arma({"command": "serverUpdate", "data": {"info": "Update from server"}})

@@ -1,275 +1,259 @@
 // js/gridLayer.js
 
-// Размеры для фоновых полос подписей (окантовка)
-var topStripeHeight = 25;   // высота верхней полосы для подписей оси X
-var leftStripeWidth = 30;   // ширина левой полосы для подписей оси Y
+const TOP_STRIPE_HEIGHT = 25;
+const LEFT_STRIPE_WIDTH = 30;
 
-// Функция преобразования hex-цвета в rgba-строку с заданной прозрачностью
 function hexToRgba(hex, alpha) {
   hex = hex.replace('#', '');
   if (hex.length === 3) {
-    hex = hex.split('').map(function(h) { return h + h; }).join('');
+    hex = hex.split('').map(h => h + h).join('');
   }
-  var r = parseInt(hex.substr(0, 2), 16);
-  var g = parseInt(hex.substr(2, 2), 16);
-  var b = parseInt(hex.substr(4, 2), 16);
-  return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Функция преобразования игровой координаты (в метрах) в контейнерную точку
-// (0,0) – левый нижний угол игры, (islandWidth, islandHeight) – правый верхний угол.
-function gameToContainerPoint(X, Y) {
-  var conf = Config.get();
-  var px = X * (conf.mapImageWidth / conf.islandWidth);
-  var py = conf.mapImageHeight - (Y * (conf.mapImageHeight / conf.islandHeight));
-  var latlng = map.unproject([px, py], 7);
+function gameToContainerPoint(X, Y, map, conf) {
+  const px = X * (conf.mapImageWidth / conf.islandWidth);
+  const py = conf.mapImageHeight - (Y * (conf.mapImageHeight / conf.islandHeight));
+  const latlng = map.unproject([px, py], 7);
   return map.latLngToContainerPoint(latlng);
 }
 
 var GridLayer = L.Layer.extend({
+  initialize: function() {
+    this._cache = {
+      kmLines: { vertical: [], horizontal: [] },
+      hmLines: { vertical: [], horizontal: [] },
+      axisLabels: [],
+      cellLabels: []
+    };
+    this._needsFullRedraw = true;
+    this._lastDrawHm = null;
+    this._lastShowCellCoords = null;
+    this._renderScheduled = false;
+  },
+
   onAdd: function(map) {
     this._map = map;
     this._canvas = L.DomUtil.create('canvas', 'leaflet-grid-layer');
-    var size = map.getSize();
+    const size = map.getSize();
     this._canvas.width = size.x;
     this._canvas.height = size.y;
-    var pane = map.getPane('overlayPane');
-    pane.appendChild(this._canvas);
-    map.on('moveend zoomend resize', this._reset, this);
+    map.getPane('overlayPane').appendChild(this._canvas);
+    
+    map.on('moveend zoomend resize', this._reset.bind(this));
     this._reset();
-    console.log("Размер контейнера: " + size.x + " x " + size.y + " пикселей");
   },
+
   onRemove: function(map) {
     map.getPane('overlayPane').removeChild(this._canvas);
-    map.off('moveend zoomend resize', this._reset, this);
+    map.off('moveend zoomend resize', this._reset.bind(this));
   },
+
   _reset: function() {
-    var topLeft = this._map.containerPointToLayerPoint([0, 0]);
+    const topLeft = this._map.containerPointToLayerPoint([0, 0]);
     L.DomUtil.setPosition(this._canvas, topLeft);
-    this._redraw();
+    const size = this._map.getSize();
+    if (this._canvas.width !== size.x || this._canvas.height !== size.y) {
+      this._canvas.width = size.x;
+      this._canvas.height = size.y;
+      this._needsFullRedraw = true;
+    }
+    this._scheduleRedraw();
   },
+
+  _scheduleRedraw: function() {
+    if (!this._renderScheduled) {
+      this._renderScheduled = true;
+      requestAnimationFrame(() => {
+        this._redraw();
+        this._renderScheduled = false;
+      });
+    }
+  },
+
+  _cacheGridLines: function() {
+    const conf = Config.get();
+    const islandWidth = conf.islandWidth;
+    const islandHeight = conf.islandHeight;
+    const kmStep = conf.kmStep;
+    const hmStep = conf.hmStep;
+
+    this._cache.kmLines.vertical = Array.from({ length: Math.ceil(islandWidth / kmStep) + 1 }, (_, i) => i * kmStep);
+    this._cache.kmLines.horizontal = Array.from({ length: Math.ceil(islandHeight / kmStep) + 1 }, (_, i) => i * kmStep);
+    this._cache.hmLines.vertical = Array.from({ length: Math.ceil(islandWidth / hmStep) + 1 }, (_, i) => i * hmStep).filter(x => x % kmStep !== 0);
+    this._cache.hmLines.horizontal = Array.from({ length: Math.ceil(islandHeight / hmStep) + 1 }, (_, i) => i * hmStep).filter(y => y % kmStep !== 0);
+  },
+
+  _cacheAxisLabels: function(drawHm) {
+    const conf = Config.get();
+    const islandWidth = conf.islandWidth;
+    const islandHeight = conf.islandHeight;
+    const kmStep = conf.kmStep;
+    const hmStep = conf.hmStep;
+
+    this._cache.axisLabels = [];
+    const step = drawHm ? hmStep : kmStep;
+
+    for (let x = 0; x <= islandWidth; x += step) {
+      const midX = x + step / 2;
+      const cellIndex = Math.floor(x / hmStep);
+      const label = cellIndex.toString().padStart(3, '0');
+      this._cache.axisLabels.push({ x: midX, y: islandHeight / 2, text: label, isX: true });
+    }
+    for (let y = 0; y <= islandHeight; y += step) {
+      const midY = y + step / 2;
+      const cellIndex = Math.floor(y / hmStep);
+      const label = cellIndex.toString().padStart(3, '0');
+      this._cache.axisLabels.push({ x: islandWidth / 2, y: midY, text: label, isX: false });
+    }
+  },
+
+  _cacheCellLabels: function() {
+    const conf = Config.get();
+    const islandWidth = conf.islandWidth;
+    const islandHeight = conf.islandHeight;
+    const hmStep = conf.hmStep;
+
+    this._cache.cellLabels = [];
+    for (let cx = 0; cx < islandWidth; cx += hmStep) {
+      for (let cy = 0; cy < islandHeight; cy += hmStep) {
+        const centerX = cx + hmStep / 2;
+        const centerY = cy + hmStep / 2;
+        const cellXVal = Math.floor(centerX / 100);
+        const cellYVal = Math.floor(centerY / 100);
+        const cellXStr = cellXVal.toString().padStart(3, '0');
+        const cellYStr = cellYVal.toString().padStart(3, '0');
+        this._cache.cellLabels.push({ x: centerX, y: centerY, textX: cellXStr, textY: cellYStr });
+      }
+    }
+  },
+
   _redraw: function() {
-    console.log("Начинается отрисовка сетки...");
-    
-    var conf = Config.get();
-    var islandWidth = conf.islandWidth;
-    var islandHeight = conf.islandHeight;
-    var mapImageWidth = conf.mapImageWidth;
-    var mapImageHeight = conf.mapImageHeight;
-    var scaleFactor = conf.scaleFactor;
-    var kmStep = conf.kmStep;
-    var hmStep = conf.hmStep;
-    
-    var kmLineStyle = conf.kmLineStyle;
-    var hmLineStyle = conf.hmLineStyle;
-    
-    var labelFont = conf.labelStyle.fontSize + "px " + conf.labelStyle.fontFamily;
-    var labelColor = conf.labelStyle.color;
-    var labelOpacity = conf.labelStyle.opacity;
-    
-    var zoomThreshold = conf.zoomThreshold;
-    var showCellCoords = conf.cellCoordStyle.show;
-    var cellCoordFont = conf.cellCoordStyle.fontSize + "px " + conf.cellCoordStyle.fontFamily;
-    var cellCoordColor = conf.cellCoordStyle.color;
-    var cellCoordOpacity = conf.cellCoordStyle.opacity;
-    
-    var canvas = this._canvas;
-    var ctx = canvas.getContext('2d');
-    var size = this._map.getSize();
+    const conf = Config.get();
+    const ctx = this._canvas.getContext('2d');
+    const size = this._map.getSize();
     ctx.clearRect(0, 0, size.x, size.y);
 
-    var currentZoom = this._map.getZoom();
-    console.log("Текущий зум: " + currentZoom);
-    var drawHm = currentZoom >= zoomThreshold;
+    const currentZoom = this._map.getZoom();
+    const drawHm = currentZoom >= conf.zoomThreshold;
+    const showCellCoords = conf.cellCoordStyle.show;
 
-    // Вычисляем контейнерные координаты для углов острова
-    var islandSw = gameToContainerPoint(0, 0);                // левый нижний угол
-    var islandNe = gameToContainerPoint(islandWidth, islandHeight); // правый верхний угол
+    // Обновляем кэш при необходимости
+    if (this._needsFullRedraw) {
+      this._cacheGridLines();
+      this._cacheCellLabels(); // Кэшируем подписи ячеек один раз
+      this._needsFullRedraw = false;
+    }
+    if (this._lastDrawHm !== drawHm) {
+      this._cacheAxisLabels(drawHm);
+      this._lastDrawHm = drawHm;
+    }
+    if (this._lastShowCellCoords !== showCellCoords) {
+      this._lastShowCellCoords = showCellCoords;
+    }
 
-    var visibleLeft = (islandSw.x >= 0) ? islandSw.x : 0;
-    var visibleTop = (islandNe.y >= 0) ? islandNe.y : 0;
-    var visibleRight = (islandNe.x <= size.x) ? islandNe.x : size.x;
-    var visibleBottom = (islandSw.y <= size.y) ? islandSw.y : size.y;
-    console.log("Видимые границы острова: левый: " + visibleLeft.toFixed(2) +
-                ", верх: " + visibleTop.toFixed(2) +
-                ", правый: " + visibleRight.toFixed(2) +
-                ", низ: " + visibleBottom.toFixed(2));
+    const islandSw = gameToContainerPoint(0, 0, this._map, conf);
+    const islandNe = gameToContainerPoint(conf.islandWidth, conf.islandHeight, this._map, conf);
+    const visibleLeft = Math.max(islandSw.x, 0);
+    const visibleTop = Math.max(islandNe.y, 0);
+    const visibleRight = Math.min(islandNe.x, size.x);
+    const visibleBottom = Math.min(islandSw.y, size.y);
 
-    // Отрисовка фоновых полос (окантовка) для подписей
+    // Отрисовка фоновых полос
     ctx.fillStyle = "white";
     ctx.globalAlpha = 0.9;
-    var topStripeY = (visibleTop > 0) ? visibleTop - topStripeHeight : 0;
-    var leftStripeX = (visibleLeft > 0) ? visibleLeft - leftStripeWidth : 0;
-    ctx.fillRect(visibleLeft, topStripeY, visibleRight - visibleLeft, topStripeHeight);
-    ctx.fillRect(leftStripeX, visibleTop, leftStripeWidth, visibleBottom - visibleTop);
-    // Явный сброс прозрачности после окантовки
+    const topStripeY = visibleTop > 0 ? visibleTop - TOP_STRIPE_HEIGHT : 0;
+    const leftStripeX = visibleLeft > 0 ? visibleLeft - LEFT_STRIPE_WIDTH : 0;
+    ctx.fillRect(visibleLeft, topStripeY, visibleRight - visibleLeft, TOP_STRIPE_HEIGHT);
+    ctx.fillRect(leftStripeX, visibleTop, LEFT_STRIPE_WIDTH, visibleBottom - visibleTop);
     ctx.globalAlpha = 1.0;
 
-    // Сохраняем текущую прозрачность перед отрисовкой линий
-    var originalAlpha = ctx.globalAlpha;
-
-    // Отрисовка километровых линий (вертикальные)
-    ctx.strokeStyle = kmLineStyle.color;
-    ctx.lineWidth = kmLineStyle.weight;
-    ctx.globalAlpha = kmLineStyle.opacity;
-    for (var x = 0; x <= islandWidth; x += kmStep) {
-      var pt = gameToContainerPoint(x, islandHeight / 2);
-      if (x <= kmStep * 2) {  // Логируем для первых двух линий
-        //console.log("Км: Вертикальная линия x=" + x + ", pt.x=" + pt.x);
-      }
-      if (pt.x < visibleLeft || pt.x > visibleRight) continue;
-      if (pt.x < visibleLeft + leftStripeWidth) {
-        //console.log("Км: Пропуск линии x=" + x + " из-за левой окантовки: pt.x=" + pt.x +
-        //            ", visibleLeft=" + visibleLeft + ", leftStripeWidth=" + leftStripeWidth);
-        continue;
-      }
-      ctx.beginPath();
-      ctx.moveTo(pt.x, visibleTop);
-      ctx.lineTo(pt.x, visibleBottom);
-      ctx.stroke();
-    }
-    // Отрисовка километровых линий (горизонтальные)
-    for (var y = 0; y <= islandHeight; y += kmStep) {
-      var pt = gameToContainerPoint(islandWidth / 2, y);
-      if (pt.y < visibleTop || pt.y > visibleBottom) continue;
-      if (pt.y >= visibleTop && pt.y <= visibleTop + topStripeHeight) continue;
-      ctx.beginPath();
-      ctx.moveTo(visibleLeft, pt.y);
-      ctx.lineTo(visibleRight, pt.y);
-      ctx.stroke();
-    }
-
-    // Восстанавливаем прозрачность после километровых линий
-    ctx.globalAlpha = originalAlpha;
-
-    if (drawHm) {
-      // Сохраняем прозрачность перед отрисовкой сотометровых линий
-      originalAlpha = ctx.globalAlpha;
-
-      ctx.strokeStyle = hmLineStyle.color;
-      ctx.lineWidth = hmLineStyle.weight;
-      ctx.globalAlpha = hmLineStyle.opacity;
-      // Отрисовка сотометровых вертикальных линий
-      for (var x = 0; x <= islandWidth; x += hmStep) {
-        if (x % kmStep === 0) continue;
-        var pt = gameToContainerPoint(x, islandHeight / 2);
-        // Добавляем лог для hm линии, если x меньше, чем первая ожидаемая линия
-        if (x <= hmStep * 2) {
-          //console.log("HM: Вертикальная линия x=" + x + ", pt.x=" + pt.x);
-        }
-        if (pt.x < visibleLeft || pt.x > visibleRight) continue;
-        if (pt.x < visibleLeft + leftStripeWidth) {
-          //console.log("HM: Пропуск линии x=" + x + " из-за левой окантовки: pt.x=" + pt.x +
-           //           ", visibleLeft=" + visibleLeft + ", leftStripeWidth=" + leftStripeWidth);
-          continue;
-        }
-        //console.log("HM: Рисование линии x=" + x + ", pt.x=" + pt.x);
-        ctx.beginPath();
+    // Километровые линии одним путем
+    ctx.strokeStyle = conf.kmLineStyle.color;
+    ctx.lineWidth = conf.kmLineStyle.weight;
+    ctx.globalAlpha = conf.kmLineStyle.opacity;
+    ctx.beginPath();
+    this._cache.kmLines.vertical.forEach(x => {
+      const pt = gameToContainerPoint(x, conf.islandHeight / 2, this._map, conf);
+      if (pt.x >= visibleLeft + LEFT_STRIPE_WIDTH && pt.x <= visibleRight) {
         ctx.moveTo(pt.x, visibleTop);
         ctx.lineTo(pt.x, visibleBottom);
-        ctx.stroke();
       }
-      // Отрисовка сотометровых горизонтальных линий
-      for (var y = 0; y <= islandHeight; y += hmStep) {
-        if (y % kmStep === 0) continue;
-        var pt = gameToContainerPoint(islandWidth / 2, y);
-        if (pt.y < visibleTop || pt.y > visibleBottom) continue;
-        if (pt.y >= visibleTop && pt.y <= visibleTop + topStripeHeight) continue;
-        ctx.beginPath();
+    });
+    this._cache.kmLines.horizontal.forEach(y => {
+      const pt = gameToContainerPoint(conf.islandWidth / 2, y, this._map, conf);
+      if (pt.y >= visibleTop + TOP_STRIPE_HEIGHT && pt.y <= visibleBottom) {
         ctx.moveTo(visibleLeft, pt.y);
         ctx.lineTo(visibleRight, pt.y);
-        ctx.stroke();
       }
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
 
-      // Восстанавливаем прозрачность после сотометровых линий
-      ctx.globalAlpha = originalAlpha;
+    // Сотометровые линии одним путем
+    if (drawHm) {
+      ctx.strokeStyle = conf.hmLineStyle.color;
+      ctx.lineWidth = conf.hmLineStyle.weight;
+      ctx.globalAlpha = conf.hmLineStyle.opacity;
+      ctx.beginPath();
+      this._cache.hmLines.vertical.forEach(x => {
+        const pt = gameToContainerPoint(x, conf.islandHeight / 2, this._map, conf);
+        if (pt.x >= visibleLeft + LEFT_STRIPE_WIDTH && pt.x <= visibleRight) {
+          ctx.moveTo(pt.x, visibleTop);
+          ctx.lineTo(pt.x, visibleBottom);
+        }
+      });
+      this._cache.hmLines.horizontal.forEach(y => {
+        const pt = gameToContainerPoint(conf.islandWidth / 2, y, this._map, conf);
+        if (pt.y >= visibleTop + TOP_STRIPE_HEIGHT && pt.y <= visibleBottom) {
+          ctx.moveTo(visibleLeft, pt.y);
+          ctx.lineTo(visibleRight, pt.y);
+        }
+      });
+      ctx.stroke();
+      ctx.globalAlpha = 1.0;
     }
 
-    // Отрисовка подписей (устанавливаем прозрачность явно)
-    console.log("Прозрачность подписей по краю (labelOpacity): " + labelOpacity);
-    // Сбрасываем прозрачность перед установкой labelOpacity
-    ctx.globalAlpha = 1.0;
-    ctx.globalAlpha = labelOpacity;
-    ctx.fillStyle = labelColor;
-    ctx.font = labelFont;
+    // Подписи по осям
+    ctx.globalAlpha = conf.labelStyle.opacity;
+    ctx.fillStyle = conf.labelStyle.color;
+    ctx.font = `${conf.labelStyle.fontSize}px ${conf.labelStyle.fontFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    
-    if (!drawHm) {
-      for (var x = 0; x <= islandWidth; x += kmStep) {
-        var midX = x + kmStep / 2;
-        var pt = gameToContainerPoint(midX, islandHeight / 2);
-        var labelY = topStripeY + topStripeHeight / 2; // Смещаем подписи поверх окантовки
-        var cellIndex = Math.floor(x / hmStep);
-        var label = cellIndex.toString().padStart(3, '0');
-        ctx.fillText(label, pt.x, labelY);
+    this._cache.axisLabels.forEach(label => {
+      const pt = gameToContainerPoint(label.x, label.y, this._map, conf);
+      if (label.isX && pt.x >= visibleLeft + LEFT_STRIPE_WIDTH && pt.x <= visibleRight) {
+        ctx.fillText(label.text, pt.x, topStripeY + TOP_STRIPE_HEIGHT / 2);
+      } else if (!label.isX && pt.y >= visibleTop + TOP_STRIPE_HEIGHT && pt.y <= visibleBottom) {
+        ctx.fillText(label.text, leftStripeX + LEFT_STRIPE_WIDTH / 2, pt.y);
       }
-      for (var y = 0; y <= islandHeight; y += kmStep) {
-        var midY = y + kmStep / 2;
-        var pt = gameToContainerPoint(islandWidth / 2, midY);
-        var labelX = leftStripeX + leftStripeWidth / 2; // Смещаем подписи поверх окантовки
-        var cellIndex = Math.floor(y / hmStep);
-        var label = cellIndex.toString().padStart(3, '0');
-        ctx.fillText(label, labelX, pt.y);
-      }
-    } else {
-      for (var x = 0; x <= islandWidth; x += hmStep) {
-        var midX = x + hmStep / 2;
-        var pt = gameToContainerPoint(midX, islandHeight / 2);
-        var labelY = topStripeY + topStripeHeight / 2; // Смещаем подписи поверх окантовки
-        var cellIndex = Math.floor(x / hmStep);
-        var label = cellIndex.toString().padStart(3, '0');
-        ctx.fillText(label, pt.x, labelY);
-      }
-      for (var y = 0; y <= islandHeight; y += hmStep) {
-        var midY = y + hmStep / 2;
-        var pt = gameToContainerPoint(islandWidth / 2, midY);
-        var labelX = leftStripeX + leftStripeWidth / 2; // Смещаем подписи поверх окантовки
-        var cellIndex = Math.floor(y / hmStep);
-        var label = cellIndex.toString().padStart(3, '0');
-        ctx.fillText(label, labelX, pt.y);
-      }
-      
-      if (showCellCoords) {
-        var baseCellSize = hmStep * scaleFactor;
-        var pt0 = gameToContainerPoint(0, islandHeight / 2);
-        var pt1 = gameToContainerPoint(hmStep, islandHeight / 2);
-        var currentCellSize = pt1.x - pt0.x;
-        var textScale = currentCellSize / baseCellSize;
-        
-        var baseFontSize = parseInt(conf.cellCoordStyle.fontSize);
-        var scaledFontSize = Math.round(baseFontSize * textScale) + "px";
-        var finalCellFont = scaledFontSize + " " + conf.cellCoordStyle.fontFamily;
-        
-        var finalCellColor = hexToRgba(cellCoordColor, cellCoordOpacity);
-        
-        ctx.fillStyle = finalCellColor;
-        ctx.font = finalCellFont;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        
-        var baseOffset = 24;
-        var lineOffset = Math.round(baseOffset * textScale);
-        
-        for (var cx = 0; cx < islandWidth; cx += hmStep) {
-          for (var cy = 0; cy < islandHeight; cy += hmStep) {
-            var centerX = cx + hmStep / 2;
-            var centerY = cy + hmStep / 2;
-            var ptCenter = gameToContainerPoint(centerX, centerY);
-            if (ptCenter.x < (leftStripeX + leftStripeWidth)) continue;
-            if (ptCenter.y >= visibleTop && ptCenter.y <= visibleTop + topStripeHeight) continue;
-            var cellXVal = Math.floor(centerX / 100);
-            var cellYVal = Math.floor(centerY / 100);
-            var cellXStr = cellXVal.toString().padStart(3, '0');
-            var cellYStr = cellYVal.toString().padStart(3, '0');
-            ctx.fillText(cellXStr, ptCenter.x, ptCenter.y - lineOffset);
-            ctx.fillText(cellYStr, ptCenter.x, ptCenter.y + lineOffset);
-          }
+    });
+
+    // Подписи ячеек
+    if (drawHm && showCellCoords) {
+      const baseCellSize = conf.hmStep * conf.scaleFactor;
+      const pt0 = gameToContainerPoint(0, conf.islandHeight / 2, this._map, conf);
+      const pt1 = gameToContainerPoint(conf.hmStep, conf.islandHeight / 2, this._map, conf);
+      const currentCellSize = pt1.x - pt0.x;
+      const textScale = currentCellSize / baseCellSize;
+      const scaledFontSize = Math.round(parseInt(conf.cellCoordStyle.fontSize) * textScale);
+      ctx.font = `${scaledFontSize}px ${conf.cellCoordStyle.fontFamily}`;
+      ctx.fillStyle = hexToRgba(conf.cellCoordStyle.color, conf.cellCoordStyle.opacity);
+      const lineOffset = Math.round(24 * textScale);
+
+      this._cache.cellLabels.forEach(label => {
+        const pt = gameToContainerPoint(label.x, label.y, this._map, conf);
+        if (pt.x >= leftStripeX + LEFT_STRIPE_WIDTH && pt.x <= visibleRight &&
+            pt.y >= visibleTop + TOP_STRIPE_HEIGHT && pt.y <= visibleBottom) {
+          ctx.fillText(label.textX, pt.x, pt.y - lineOffset);
+          ctx.fillText(label.textY, pt.x, pt.y + lineOffset);
         }
-      }
+      });
     }
-    // Завершающий сброс прозрачности
+
     ctx.globalAlpha = 1.0;
-    console.log("Отрисовка сетки завершена.");
   }
 });
