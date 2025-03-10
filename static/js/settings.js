@@ -280,7 +280,7 @@
 	Config.save();
 	Config.apply();
 	if (namesLayer && typeof namesLayer._createMarkers === "function") {
-		namesLayer._createMarkers(); // Пересоздаем маркеры с новыми стилями
+		namesLayer.updateStyles(); // Пересоздаем маркеры с новыми стилями
 	}
 	document.body.removeChild(overlay);
 	};
