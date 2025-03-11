@@ -2,34 +2,56 @@ import os
 import logging
 import sqlite3
 import base64
-from flask import Flask, send_from_directory, abort, request, jsonify
+from flask import Flask, send_from_directory, abort, request, jsonify, Response
 import arma_connector
+import time
+import json  # Добавляем импорт json
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+# Указываем путь к static явно
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
-# Настройка логирования
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("TileServer")
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 
-# Папка с тайлами и прочие константы
+# Настройка логирования (только ошибки и инфо)
+logger = logging.getLogger("Server")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+
+# Константы
 TILES_FOLDER = "maps/chernarus/"
 SNAPSHOTS_FOLDER = "snapshots"
 CACHE_TIMEOUT = 86400
 TRANSPARENT_TILE = "transparent.png"
 os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
+# Явный маршрут для статических файлов
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    logger.debug(f"Попытка отдать файл: {filename}")
+    return send_from_directory(STATIC_DIR, filename)
+
 @app.route("/arma_data", methods=["GET"])
 def get_arma_data():
     with arma_connector.lock:
         if arma_connector.data is None:
-            logger.info("GET /arma_data: No data available")
             return jsonify({"status": "no_data"}), 200
-        logger.info(f"GET /arma_data: Sending data - {arma_connector.data}")
         return jsonify({"status": "success", "data": arma_connector.data}), 200
-
-@app.before_request
-def log_request_info():
-    logger.debug(f"Запрос: {request.method} {request.url} от {request.remote_addr}")
+        
+# Новый эндпоинт для SSE
+@app.route("/arma_data_stream")
+def arma_data_stream():
+    def event_stream():
+        last_data = None
+        while True:
+            with arma_connector.lock:
+                if arma_connector.data != last_data and arma_connector.data is not None:
+                    last_data = arma_connector.data
+                    yield f"data: {json.dumps({'status': 'success', 'data': last_data})}\n\n"
+            time.sleep(0.1)  # Проверяем каждые 100 мс
+    return Response(event_stream(), mimetype="text/event-stream")
 
 @app.after_request
 def add_cors_headers(response):
@@ -45,9 +67,7 @@ def serve_index():
 @app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
 def get_tile(z, x, y):
     if x < 0 or y < 0:
-        logger.error(f"Отрицательные индексы тайла: x={x}, y={y}")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
-        
     tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
     tile_filename = f"{y}.png"
     tile_path = os.path.join(tile_dir, tile_filename)
@@ -56,29 +76,24 @@ def get_tile(z, x, y):
         response.cache_control.max_age = CACHE_TIMEOUT
         response.cache_control.public = True
         return response
-    else:
-        logger.error(f"Тайл не найден: {tile_path}")
-        return send_from_directory(app.static_folder, TRANSPARENT_TILE)
+    return send_from_directory(app.static_folder, TRANSPARENT_TILE)
 
 @app.route("/save_snapshot", methods=["POST"])
 def save_snapshot():
     data = request.get_json()
     if not data or "image" not in data or "filename" not in data:
         abort(400, "Неверные параметры")
-    
     image_data = data["image"].split(',')[1]
     filename = data["filename"]
     file_path = os.path.join(SNAPSHOTS_FOLDER, filename)
-    
     try:
         with open(file_path, "wb") as f:
             f.write(base64.b64decode(image_data))
-        logger.info(f"Снимок сохранен: {file_path}")
         return jsonify({"status": "success", "path": file_path}), 200
     except Exception as e:
         logger.error(f"Ошибка сохранения снимка: {e}")
         abort(500)
-        
+
 @app.route("/names")
 def get_names():
     db_path = os.path.join("db", "name.db")
@@ -92,7 +107,7 @@ def get_names():
         conn.close()
         return jsonify(names_list)
     except Exception as e:
-        logger.error("Ошибка при чтении базы данных: %s", e)
+        logger.error(f"Ошибка чтения базы данных: {e}")
         abort(500)
 
 @app.route("/update_label", methods=["POST"])
@@ -107,10 +122,9 @@ def update_label():
         cur.execute("UPDATE names SET x = ?, y = ? WHERE id = ?", (data["x"], data["y"], data["id"]))
         conn.commit()
         conn.close()
-        logger.info(f"Надпись id={data['id']} обновлена: x={data['x']}, y={data['y']}")
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        logger.error("Ошибка при обновлении надписи: %s", e)
+        logger.error(f"Ошибка обновления надписи: {e}")
         abort(500)
 
 @app.route("/add_label", methods=["POST"])
@@ -122,15 +136,14 @@ def add_label():
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
-        cur.execute("INSERT INTO names (name, type, x, y) VALUES (?, ?, ?, ?)",
+        cur.execute("INSERT INTO names (name, type, x, y) VALUES (?, ?, ?, ?)", 
                     (data["name"], data["type"], data["x"], data["y"]))
         conn.commit()
         new_id = cur.lastrowid
         conn.close()
-        logger.info(f"Добавлена новая надпись id={new_id}: {data}")
         return jsonify({"status": "success", "id": new_id}), 200
     except Exception as e:
-        logger.error("Ошибка при добавлении надписи: %s", e)
+        logger.error(f"Ошибка добавления надписи: {e}")
         abort(500)
 
 @app.route("/send_to_arma", methods=["POST"])
@@ -142,10 +155,9 @@ def send_to_arma_endpoint():
         arma_connector.send_to_arma(data)
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        logger.error(f"Ошибка при отправке в ARMA: {e}")
+        logger.error(f"Ошибка отправки в ARMA: {e}")
         abort(500)
 
-# Новый эндпоинт для отправки callback-сообщений в ARMA через DLL
 @app.route("/send_callback", methods=["POST"])
 def send_callback_endpoint():
     data = request.get_json()
@@ -155,11 +167,11 @@ def send_callback_endpoint():
         arma_connector.send_callback_to_arma(data)
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        logger.error(f"Ошибка при отправке callback в ARMA: {e}")
+        logger.error(f"Ошибка отправки callback в ARMA: {e}")
         abort(500)
 
 if __name__ == "__main__":
     import threading
     threading.Thread(target=arma_connector.run_server, daemon=True).start()
-    logger.info("Запуск сервера TileServer на http://localhost:5000")
-    app.run(debug=True, port=5000)
+    logger.info("Сервер запущен на http://localhost:5000")
+    app.run(host="0.0.0.0", port=5000, debug=False)

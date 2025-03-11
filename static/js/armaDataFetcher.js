@@ -1,20 +1,16 @@
-// Функция для запроса данных с сервера
-function fetchArmaData() {
-    fetch('/arma_data')
-        .then(response => {
-            console.log("Статус ответа сервера:", response.status); // Логируем HTTP-статус
-            return response.json();
-        })
-        .then(data => {
-            console.log("Полный ответ от сервера:", data); // Логируем весь JSON
-            if (data.status === "success") {
-                console.log("Данные от ARMA:", JSON.stringify(data.data, null, 2));
-            } else {
-                console.log("Нет данных от ARMA (статус:", data.status, ")");
-            }
-        })
-        .catch(error => console.error("Ошибка при получении данных от ARMA:", error));
+function setupArmaDataStream() {
+    const source = new EventSource('/arma_data_stream');
+    source.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.status === "success") {
+            console.log("Данные от ARMA полученны");
+			window.unitLayer.updateData(data.data);
+        }
+    };
+    source.onerror = function() {
+        console.error("Ошибка соединения с сервером SSE");
+        source.close();
+    };
 }
 
-setInterval(fetchArmaData, 10000);
-fetchArmaData();
+setupArmaDataStream();

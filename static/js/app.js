@@ -66,6 +66,7 @@ gridLayer.addTo(map);
 
 // Используем глобальную переменную namesLayer
 namesLayer.addTo(map);
+unitLayer.addTo(map); // Добавляем слой юнитов
 
 map.on('zoomend moveend resize', function() {
   if (gridLayer && typeof gridLayer._redraw === "function") {
