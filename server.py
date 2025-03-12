@@ -2,6 +2,7 @@ import os
 import logging
 import sqlite3
 import base64
+import threading
 from flask import Flask, send_from_directory, abort, request, jsonify, Response
 import arma_connector
 import time
@@ -27,6 +28,21 @@ CACHE_TIMEOUT = 86400
 TRANSPARENT_TILE = "transparent.png"
 os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
+# Переменная для хранения интервала обновления (в секундах)
+update_interval = 3  # По умолчанию 60 секунд
+update_thread = None
+update_running = False
+
+def send_update_request():
+    global update_running
+    while update_running:
+        try:
+            arma_connector.send_callback_to_arma({"command": "update_data"})
+            logger.info("Команда update_data отправлена в ARMA")
+        except Exception as e:
+            logger.error(f"Ошибка отправки команды update_data: {e}")
+        time.sleep(update_interval)
+
 # Явный маршрут для статических файлов
 @app.route('/static/<path:filename>')
 def serve_static(filename):
@@ -36,7 +52,9 @@ def serve_static(filename):
 @app.route("/arma_data", methods=["GET"])
 def get_arma_data():
     with arma_connector.lock:
+        logger.debug(f"GET /arma_data: Current data = {arma_connector.data}")
         if arma_connector.data is None:
+            logger.info("GET /arma_data: No data available")
             return jsonify({"status": "no_data"}), 200
         return jsonify({"status": "success", "data": arma_connector.data}), 200
         
@@ -49,9 +67,46 @@ def arma_data_stream():
             with arma_connector.lock:
                 if arma_connector.data != last_data and arma_connector.data is not None:
                     last_data = arma_connector.data
+                    logger.debug(f"SSE: Sending data - {last_data}")
                     yield f"data: {json.dumps({'status': 'success', 'data': last_data})}\n\n"
-            time.sleep(0.1)  # Проверяем каждые 100 мс
+            time.sleep(0.1)
     return Response(event_stream(), mimetype="text/event-stream")
+
+@app.route("/send_callback", methods=["POST"])
+def send_callback_endpoint():
+    data = request.get_json()
+    if not data:
+        logger.error("Неверные параметры в /send_callback")
+        return jsonify({"status": "error", "message": "Invalid parameters"}), 400
+    try:
+        arma_connector.send_callback_to_arma(data)
+        logger.info(f"Callback отправлен: {data}")
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Ошибка в /send_callback: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+        
+@app.route("/set_update_interval", methods=["POST"])
+def set_update_interval():
+    global update_interval, update_running, update_thread
+    data = request.get_json()
+    if not data or "interval" not in data:
+        logger.error("Неверные параметры в /set_update_interval")
+        return jsonify({"status": "error", "message": "Missing interval"}), 400
+    new_interval = int(data["interval"])
+    if new_interval < 1:
+        logger.error("Интервал должен быть больше 0")
+        return jsonify({"status": "error", "message": "Interval must be positive"}), 400
+    
+    update_interval = new_interval
+    if update_running:
+        update_running = False
+        update_thread.join()  # Ожидаем завершения старого потока
+    update_running = True
+    update_thread = threading.Thread(target=send_update_request, daemon=True)
+    update_thread.start()
+    logger.info(f"Установлен интервал обновления: {update_interval} секунд")
+    return jsonify({"status": "success", "interval": update_interval}), 200
 
 @app.after_request
 def add_cors_headers(response):
@@ -158,20 +213,12 @@ def send_to_arma_endpoint():
         logger.error(f"Ошибка отправки в ARMA: {e}")
         abort(500)
 
-@app.route("/send_callback", methods=["POST"])
-def send_callback_endpoint():
-    data = request.get_json()
-    if not data:
-        abort(400, "Неверные параметры")
-    try:
-        arma_connector.send_callback_to_arma(data)
-        return jsonify({"status": "success"}), 200
-    except Exception as e:
-        logger.error(f"Ошибка отправки callback в ARMA: {e}")
-        abort(500)
+
 
 if __name__ == "__main__":
-    import threading
     threading.Thread(target=arma_connector.run_server, daemon=True).start()
+    update_running = True
+    update_thread = threading.Thread(target=send_update_request, daemon=True)
+    update_thread.start()
     logger.info("Сервер запущен на http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)

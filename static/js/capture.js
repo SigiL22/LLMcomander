@@ -1,6 +1,6 @@
 // js/capture.js
 
-function openMapWindow(xxx, yyy, m, showCellLabels = false) {
+function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
   const conf = Config.get();
   const CELL_SIZE = 100;
   const MAX_ZOOM = conf.maxZoom || 9;
@@ -11,23 +11,21 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false) {
   const WINDOW_MARGIN = 0.1;
   const TILE_LOAD_TIMEOUT = 5000;
 
-  console.log(`[openMapWindow] Запуск: xxx=${xxx}, yyy=${yyy}, m=${m}, showCellLabels=${showCellLabels}`);
+  console.log(`[openMapWindow] Запуск: xxx=${xxx}, yyy=${yyy}, m=${m}, showCellLabels=${showCellLabels}, sides=${sides}`);
 
   const centerX = xxx * CELL_SIZE + CELL_SIZE / 2;
   const centerY = yyy * CELL_SIZE + CELL_SIZE / 2;
-  const areaCells = 2 * m + 1; // Например, для m=5 -> 11 ячеек
-  const areaMeters = areaCells * CELL_SIZE; // Полная ширина/высота в метрах (1100 м для m=5)
+  const areaCells = 2 * m + 1;
+  const areaMeters = areaCells * CELL_SIZE;
   const minX = centerX - areaMeters / 2;
   const maxX = centerX + areaMeters / 2;
   const minY = centerY - areaMeters / 2;
   const maxY = centerY + areaMeters / 2;
 
-  // Кэшируем LatLng
   const centerLatLng = gameToLatLng(centerX, centerY, conf);
   const sw = gameToLatLng(minX, minY, conf);
   const ne = gameToLatLng(maxX, maxY, conf);
 
-  // Расчет оптимального зума и размера окна
   let zoom = MAX_ZOOM;
   let pixelsPerMeter = PIXELS_PER_METER_ZOOM_7 * Math.pow(2, zoom - 7);
   const areaWidthMeters = maxX - minX;
@@ -63,6 +61,7 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false) {
         <script src="js/gameToLatLng.js"></script>
         <script src="js/gridLayer.js"></script>
         <script src="js/namesLayer.js"></script>
+        <script src="js/unitLayer.js"></script>
         <style>
           #map { width: 100%; height: 100%; }
           body { margin: 0; }
@@ -106,12 +105,37 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false) {
 
           var gridLayer = new GridLayer().addTo(map);
           var namesLayer = new NamesLayer().addTo(map);
+          var unitLayer = new UnitLayer().addTo(map);
 
           // Устанавливаем центр и зум без подгонки
           map.setView([${centerLatLng.lat}, ${centerLatLng.lng}], ${zoom});
 
           Config.apply();
           setTimeout(() => gridLayer._redraw && gridLayer._redraw(), 100);
+
+          // Получаем данные через /arma_data
+          fetch('http://localhost:5000/arma_data')
+            .then(response => response.json())
+            .then(data => {
+              if (data.status === "success") {
+                let filteredData = { sides: {} };
+                const sidesToShow = ${JSON.stringify(sides)};
+                if (sidesToShow.length > 0 && data.data.sides) {
+                  sidesToShow.forEach(side => {
+                    if (data.data.sides[side]) {
+                      filteredData.sides[side] = data.data.sides[side];
+                    }
+                  });
+                } else {
+                  filteredData = data.data;
+                }
+                logToParent('Передаём данные в unitLayer:', filteredData);
+                unitLayer.updateData(filteredData);
+              } else {
+                logToParent('Нет данных от /arma_data:', data);
+              }
+            })
+            .catch(err => logToParent('Ошибка получения данных:', err));
 
           const waitForTiles = new Promise((resolve) => {
             tileLayer.once('load', () => {
