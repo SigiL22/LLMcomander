@@ -3,8 +3,6 @@ function setupArmaDataStream() {
     source.onmessage = function(event) {
         const data = JSON.parse(event.data);
         if (data.status === "success") {
-            console.log("Данные от ARMA получены:");
-            console.log("Вызываем updateData");
             window.unitLayer.updateData(data.data);
         }
     };

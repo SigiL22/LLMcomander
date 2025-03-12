@@ -324,6 +324,25 @@
       }
     }
   }
+  
+  function createSettingsToolbar() {
+    var toolbar = document.createElement('div');
+    toolbar.id = "settingsToolbar";
+    toolbar.style.position = "absolute";
+    toolbar.style.top = "10px";
+    toolbar.style.left = "10px";
+    toolbar.style.zIndex = "1000";
+
+    var mapBtn = document.createElement('button');
+    mapBtn.innerText = "Настройки карты";
+    mapBtn.onclick = function() {
+      showSettingsModal();
+    };
+    toolbar.appendChild(mapBtn);
+
+    // Кнопка "Настройки миссии" добавляется здесь через missionSettings.js
+    document.body.appendChild(toolbar);
+  }
 
   // Инициализация: создаем стили и тулбар настроек
   createSettingsStyles();
