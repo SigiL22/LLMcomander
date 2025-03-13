@@ -43,7 +43,6 @@ function pixelToGame(latlng) {
       marker.on('click', onGroupClick);
     });
     map.on('dblclick', onMapDoubleClick);
-    // Добавляем обработчик двойного клика для редактирования вэйпойнтов
     unitLayer._waypointLayer.eachLayer(marker => {
       marker.on('dblclick', onWaypointDoubleClick);
     });
@@ -176,7 +175,6 @@ function pixelToGame(latlng) {
         select.appendChild(option);
       });
       
-      // Устанавливаем сохраненное значение или значение из waypointData
       if (waypointData && waypointData.params[param.id]) {
         select.value = waypointData.params[param.id];
       } else if (lastValues[param.id]) {
@@ -252,7 +250,8 @@ function pixelToGame(latlng) {
     .then(result => {
       if (result.status === "success") {
         console.log("Вэйпойнт создан:", message);
-        addWaypointMarker(latlng, message);
+        // Маркер будет добавлен/обновлен через updateData в unitLayer.js
+        // Здесь не добавляем напрямую, ждем синхронизацию через arma_data
       } else {
         console.error("Ошибка создания вэйпойнта:", result);
       }
@@ -270,7 +269,7 @@ function pixelToGame(latlng) {
       command: "edit_waypoint",
       side: waypointData.params.side,
       group: waypointData.params.group,
-      waypointNumber: waypointData.number, // Номер вэйпойнта для идентификации
+      waypointIndex: waypointData.waypointIndex, // Используем "i" из "w"
       type: document.getElementById("wp_type").value,
       position: JSON.stringify([Math.round(gameCoords.x), Math.round(gameCoords.y), 0])
     };
@@ -281,7 +280,6 @@ function pixelToGame(latlng) {
       if (value) message[param] = value;
     });
 
-    // Сохраняем выбранные значения
     const lastValues = {};
     lastValues.type = message.type;
     optionalParams.forEach(param => {
@@ -314,7 +312,7 @@ function pixelToGame(latlng) {
       command: "delete_waypoint",
       side: waypointData.params.side,
       group: waypointData.params.group,
-      waypointNumber: waypointData.number
+      waypointIndex: waypointData.waypointIndex // Используем "i" из "w"
     };
 
     fetch('/send_callback', {
@@ -340,7 +338,8 @@ function pixelToGame(latlng) {
   function addWaypointMarker(latlng, message) {
     const sideIcon = message.side === "OPFOR" ? '/static/ico/r_wp.png' : '/static/ico/b_wp.png';
     const groupName = message.group;
-    const wpNumber = unitLayer._waypointLayer.getLayers().filter(l => l.options.data && l.options.data.group === groupName).length / 2 + 1;
+    // Временный индекс, будет перезаписан при синхронизации из arma_data
+    const wpIndex = message.waypointIndex !== undefined ? message.waypointIndex : unitLayer._waypointLayer.getLayers().length / 2;
     
     const icon = L.icon({
       iconUrl: sideIcon,
@@ -348,7 +347,11 @@ function pixelToGame(latlng) {
       iconAnchor: [15, 15]
     });
     const marker = L.marker(latlng, { icon: icon });
-    marker.options.data = { group: groupName, number: wpNumber, params: message };
+    marker.options.data = { 
+      group: groupName, 
+      waypointIndex: wpIndex, // Используем "i" из "w" или временный индекс
+      params: message 
+    };
     
     const tooltipContent = `
       Тип: ${message.type || "N/A"}<br>
@@ -363,13 +366,13 @@ function pixelToGame(latlng) {
     }
     
     const labelIcon = L.divIcon({
-      html: `<div class="group-label">${groupName} #${wpNumber}</div>`,
+      html: `<div class="group-label">${groupName} #${wpIndex}</div>`,
       className: 'label-marker',
       iconSize: [100, 20],
       iconAnchor: [50, -15]
     });
     const labelMarker = L.marker(latlng, { icon: labelIcon });
-    labelMarker.options.data = { group: groupName, number: wpNumber };
+    labelMarker.options.data = { group: groupName, waypointIndex: wpIndex };
     
     unitLayer._waypointLayer.addLayer(marker);
     unitLayer._waypointLayer.addLayer(labelMarker);
@@ -378,7 +381,7 @@ function pixelToGame(latlng) {
   // Обновление маркера вэйпойнта
   function updateWaypointMarker(latlng, message, waypointData) {
     unitLayer._waypointLayer.eachLayer(layer => {
-      if (layer.options.data.group === waypointData.group && layer.options.data.number === waypointData.number) {
+      if (layer.options.data.group === waypointData.group && layer.options.data.waypointIndex === waypointData.waypointIndex) {
         if (layer.options.icon) { // Это маркер
           layer.setLatLng(latlng);
           layer.options.data.params = message;
@@ -399,7 +402,7 @@ function pixelToGame(latlng) {
   function removeWaypointMarker(waypointData) {
     const layersToRemove = [];
     unitLayer._waypointLayer.eachLayer(layer => {
-      if (layer.options.data.group === waypointData.group && layer.options.data.number === waypointData.number) {
+      if (layer.options.data.group === waypointData.group && layer.options.data.waypointIndex === waypointData.waypointIndex) {
         layersToRemove.push(layer);
       }
     });
@@ -412,6 +415,9 @@ function pixelToGame(latlng) {
   // Экспортируем публичный API
   window.waypointEditor = {
     onGroupClick: onGroupClick,
-    toggleWaypointMode: toggleWaypointMode
+    toggleWaypointMode: toggleWaypointMode,
+    addWaypointMarker: addWaypointMarker,
+    updateWaypointMarker: updateWaypointMarker,
+    removeWaypointMarker: removeWaypointMarker
   };
 })();
