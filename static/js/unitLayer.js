@@ -22,10 +22,12 @@ const unitIcons = {
 // Класс слоя для юнитов и техники
 var UnitLayer = L.Layer.extend({
     initialize: function() {
-        this._groupLayer = L.layerGroup(); // Слой для групп
-        this._vehicleLayer = L.layerGroup(); // Слой для техники
-        this._labelLayer = L.layerGroup(); // Слой для подписей
-        this._lastData = null; // Храним последние данные для сравнения
+        this._groupLayer = L.layerGroup();
+        this._vehicleLayer = L.layerGroup();
+        this._labelLayer = L.layerGroup();
+        this._waypointLayer = L.layerGroup();
+        this._lastData = null;
+        this.waypointMode = false;
     },
 
     onAdd: function(map) {
@@ -33,16 +35,17 @@ var UnitLayer = L.Layer.extend({
         this._groupLayer.addTo(map);
         this._vehicleLayer.addTo(map);
         this._labelLayer.addTo(map);
+        this._waypointLayer.addTo(map);
     },
 
     onRemove: function(map) {
         this._groupLayer.removeFrom(map);
         this._vehicleLayer.removeFrom(map);
         this._labelLayer.removeFrom(map);
+        this._waypointLayer.removeFrom(map);
     },
 
     updateData: function(jsonData) {
-        // Проверяем, изменились ли данные
         if (JSON.stringify(jsonData) === JSON.stringify(this._lastData)) {
             console.log("Данные не изменились, пропускаем обновление");
             return;
@@ -59,7 +62,6 @@ var UnitLayer = L.Layer.extend({
         Object.keys(jsonData.sides).forEach(side => {
             const sideData = jsonData.sides[side];
             sideData.forEach(group => {
-                // Маркер группы
                 const groupPos = group.p;
                 const groupLatLng = gameToLatLng(groupPos[0], groupPos[1], conf);
                 const groupIcon = unitIcons[side] ? unitIcons[side].infantry : unitIcons["OPFOR"].infantry;
@@ -69,13 +71,33 @@ var UnitLayer = L.Layer.extend({
                     Юнитов: ${group.co || 'N/A'}<br>
                     Поведение: ${group.b || 'N/A'}
                 `;
-                const groupMarker = L.marker(groupLatLng, { icon: groupIcon })
-                    .addTo(this._groupLayer);
-                groupMarker.bindTooltip(groupTooltip, { 
-                    direction: 'top', 
-                    offset: [0, -15], 
-                    className: 'group-tooltip'
-                });
+
+                // Проверяем, находится ли командир в технике
+                let leaderInVehicle = false;
+                let leaderVehicleId = null;
+                if (group.u && group.u.length > 0) {
+                    const leaderUnit = group.u.find(u => u.n === group.c); // Находим командира в списке юнитов
+                    if (leaderUnit && leaderUnit.v) {
+                        leaderInVehicle = true;
+                        leaderVehicleId = leaderUnit.v.id; // ID техники командира
+                    }
+                }
+
+                // Создаем маркер группы только если командир не в технике
+                if (!leaderInVehicle) {
+                    const groupMarker = L.marker(groupLatLng, { 
+                        icon: groupIcon,
+                        data: { side: side, group: group.n }
+                    }).addTo(this._groupLayer);
+                    groupMarker.bindTooltip(groupTooltip, { 
+                        direction: 'top', 
+                        offset: [0, -15], 
+                        className: 'group-tooltip'
+                    });
+                    if (this.waypointMode && window.waypointEditor && window.waypointEditor.onGroupClick) {
+                        groupMarker.on('click', window.waypointEditor.onGroupClick);
+                    }
+                }
 
                 // Подпись группы
                 L.marker(groupLatLng, {
@@ -83,7 +105,7 @@ var UnitLayer = L.Layer.extend({
                         html: `<div class="group-label">${group.n}</div>`,
                         className: 'label-marker',
                         iconSize: [100, 20],
-                        iconAnchor: [50, -15] // Подпись чуть выше иконки
+                        iconAnchor: [50, -15]
                     })
                 }).addTo(this._labelLayer);
 
@@ -100,21 +122,27 @@ var UnitLayer = L.Layer.extend({
                             Топливо: ${vehicle.f}<br>
                             Здоровье: ${vehicle.h}
                         `;
-                        const vehMarker = L.marker(vehLatLng, { icon: vehIcon })
-                            .addTo(this._vehicleLayer);
+                        const vehMarker = L.marker(vehLatLng, { 
+                            icon: vehIcon,
+                            data: { side: side, group: group.n, vehicleId: vehicle.id } // Добавляем данные о группе
+                        }).addTo(this._vehicleLayer);
                         vehMarker.bindTooltip(vehTooltip, { 
                             direction: 'top', 
                             offset: [0, -15], 
                             className: 'vehicle-tooltip'
                         });
 
-                        // Подпись техники с названием группы
+                        // Привязываем обработчик клика для техники
+                        if (this.waypointMode && window.waypointEditor && window.waypointEditor.onGroupClick) {
+                            vehMarker.on('click', window.waypointEditor.onGroupClick);
+                        }
+
                         L.marker(vehLatLng, {
                             icon: L.divIcon({
                                 html: `<div class="vehicle-label">${group.n}<br>${vehicle.vn}<br>${vehicle.id}</div>`,
                                 className: 'label-marker',
-                                iconSize: [100, 40], // Увеличиваем высоту для трёх строк
-                                iconAnchor: [50, -35] // Смещаем ниже подписи группы
+                                iconSize: [100, 40],
+                                iconAnchor: [50, -35]
                             })
                         }).addTo(this._labelLayer);
                     });
