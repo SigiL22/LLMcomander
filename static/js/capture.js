@@ -107,13 +107,12 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
           var namesLayer = new NamesLayer().addTo(map);
           var unitLayer = new UnitLayer().addTo(map);
 
-          // Устанавливаем центр и зум без подгонки
           map.setView([${centerLatLng.lat}, ${centerLatLng.lng}], ${zoom});
 
           Config.apply();
           setTimeout(() => gridLayer._redraw && gridLayer._redraw(), 100);
 
-          // Получаем данные через /arma_data
+          // Получаем данные юнитов через /arma_data
           fetch('http://localhost:5000/arma_data')
             .then(response => response.json())
             .then(data => {
@@ -136,6 +135,50 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
               }
             })
             .catch(err => logToParent('Ошибка получения данных:', err));
+
+          // Получаем данные зданий и названий из базы
+          const area = { minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY} };
+          fetch('http://localhost:5000/get_buildings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(area)
+          })
+            .then(response => response.json())
+            .then(buildings => {
+              const buildingsJson = buildings.map(b => ({
+                i: b.id,
+                n: b.name,
+                p: [b.x, b.y, b.z],
+                in: b.interior
+              }));
+              fetch('/save_json', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: 'buildings.json', data: buildingsJson })
+              }).then(() => logToParent('Buildings JSON сохранен'));
+            })
+            .catch(err => logToParent('Ошибка получения зданий:', err));
+
+          fetch('http://localhost:5000/get_names_in_area', {
+			  method: 'POST',
+			  headers: { 'Content-Type': 'application/json' },
+			  body: JSON.stringify(area)
+			})
+			  .then(response => response.json())
+			  .then(names => {
+				const namesJson = names.map(n => ({
+				  i: n.id,
+				  n: n.name,
+				  t: n.type,
+				  p: [n.x, n.y]
+				}));
+				fetch('/save_json', {
+				  method: 'POST',
+				  headers: { 'Content-Type': 'application/json' },
+				  body: JSON.stringify({ filename: 'names.json', data: namesJson })
+				}).then(() => logToParent('Names JSON сохранен'));
+			  })
+			  .catch(err => logToParent('Ошибка получения названий:', err));
 
           const waitForTiles = new Promise((resolve) => {
             tileLayer.once('load', () => {

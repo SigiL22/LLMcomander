@@ -6,11 +6,12 @@ import threading
 from flask import Flask, send_from_directory, abort, request, jsonify, Response
 import arma_connector
 import time
-import json  # Добавляем импорт json
+import json
 
-# Указываем путь к static явно
+# Указываем путь к static и db явно
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
+DB_DIR = os.path.join(BASE_DIR, 'db')
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 
@@ -29,7 +30,7 @@ TRANSPARENT_TILE = "transparent.png"
 os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
 # Переменная для хранения интервала обновления (в секундах)
-update_interval = 3  # По умолчанию 60 секунд
+update_interval = 3  # По умолчанию 3 секунды
 update_thread = None
 update_running = False
 
@@ -57,8 +58,7 @@ def get_arma_data():
             logger.info("GET /arma_data: No data available")
             return jsonify({"status": "no_data"}), 200
         return jsonify({"status": "success", "data": arma_connector.data}), 200
-        
-# Новый эндпоинт для SSE
+
 @app.route("/arma_data_stream")
 def arma_data_stream():
     def event_stream():
@@ -85,7 +85,7 @@ def send_callback_endpoint():
     except Exception as e:
         logger.error(f"Ошибка в /send_callback: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-        
+
 @app.route("/set_update_interval", methods=["POST"])
 def set_update_interval():
     global update_interval, update_running, update_thread
@@ -151,7 +151,7 @@ def save_snapshot():
 
 @app.route("/names")
 def get_names():
-    db_path = os.path.join("db", "name.db")
+    db_path = os.path.join(DB_DIR, "name.db")
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -170,7 +170,7 @@ def update_label():
     data = request.get_json()
     if not data or "id" not in data or "x" not in data or "y" not in data:
         abort(400, "Неверные параметры")
-    db_path = os.path.join("db", "name.db")
+    db_path = os.path.join(DB_DIR, "name.db")
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -187,7 +187,7 @@ def add_label():
     data = request.get_json()
     if not data or "name" not in data or "type" not in data or "x" not in data or "y" not in data:
         abort(400, "Неверные параметры")
-    db_path = os.path.join("db", "name.db")
+    db_path = os.path.join(DB_DIR, "name.db")
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -213,7 +213,63 @@ def send_to_arma_endpoint():
         logger.error(f"Ошибка отправки в ARMA: {e}")
         abort(500)
 
+# Новые эндпоинты для работы с базами зданий и названий
+@app.route("/get_buildings", methods=["POST"])
+def get_buildings():
+    area = request.get_json()
+    min_x, max_x, min_y, max_y = area['minX'], area['maxX'], area['minY'], area['maxY']
+    db_path = os.path.join(DB_DIR, "buildings.db")  # Путь к базе buildings.db
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, x, y, z, interior FROM buildings WHERE x >= ? AND x <= ? AND y >= ? AND y <= ?",
+                    (min_x, max_x, min_y, max_y))
+        buildings = [{'id': row['id'], 'name': row['name'], 'x': row['x'], 'y': row['y'], 'z': row['z'], 'interior': row['interior']} for row in cur.fetchall()]
+        conn.close()
+        logger.info(f"Получено зданий: {len(buildings)} для области {min_x},{min_y} - {max_x},{max_y}")
+        return jsonify(buildings)
+    except Exception as e:
+        logger.error(f"Ошибка получения зданий: {e}")
+        abort(500)
 
+# Новый маршрут для названий в области
+@app.route("/get_names_in_area", methods=["POST"])
+def get_names_in_area():
+    area = request.get_json()
+    min_x, max_x, min_y, max_y = area['minX'], area['maxX'], area['minY'], area['maxY']
+    db_path = os.path.join(DB_DIR, "name.db")  # Путь к базе name.db
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, type, x, y FROM names WHERE x >= ? AND x <= ? AND y >= ? AND y <= ?",
+                    (min_x, max_x, min_y, max_y))
+        names = [{'id': row['id'], 'name': row['name'], 'type': row['type'], 'x': row['x'], 'y': row['y']} for row in cur.fetchall()]
+        conn.close()
+        logger.info(f"Получено названий: {len(names)} для области {min_x},{min_y} - {max_x},{max_y}")
+        return jsonify(names)
+    except Exception as e:
+        logger.error(f"Ошибка получения названий: {e}")
+        abort(500)
+
+@app.route("/save_json", methods=["POST"])
+def save_json():
+    data = request.get_json()
+    if not data or "filename" not in data or "data" not in data:
+        logger.error("Неверные параметры в /save_json")
+        return jsonify({"status": "error", "message": "Invalid parameters"}), 400
+    filename = data["filename"]
+    content = data["data"]
+    file_path = os.path.join(BASE_DIR, filename)
+    try:
+        with open(file_path, 'w') as f:
+            json.dump(content, f)
+        logger.info(f"JSON сохранен: {file_path}")
+        return jsonify({"status": "success", "filename": filename}), 200
+    except Exception as e:
+        logger.error(f"Ошибка сохранения JSON: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
     threading.Thread(target=arma_connector.run_server, daemon=True).start()
