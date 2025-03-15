@@ -1,7 +1,9 @@
+# arma_connector.py
 import socket
 import json
 import threading
 import logging
+from queue import Queue
 
 logger = logging.getLogger("ArmaConnector")
 logger.setLevel(logging.DEBUG)
@@ -11,6 +13,7 @@ logger.addHandler(handler)
 
 data = None
 lock = threading.Lock()
+reports_queue = Queue()  # Очередь для репортов
 
 def run_server():
     global data
@@ -24,28 +27,35 @@ def run_server():
         try:
             client, addr = server.accept()
             logger.debug(f"Подключение от {addr}")
-            received = bytearray()  # Используем bytearray для накопления байтов
+            received = bytearray()
             
             while True:
-                chunk = client.recv(8192)  # Увеличиваем буфер до 8192
+                chunk = client.recv(8192)
                 if not chunk:
                     break
                 received.extend(chunk)
-                # Проверяем, закончился ли JSON (баланс фигурных скобок)
                 try:
                     decoded = received.decode('utf-8')
                     if decoded.count('{') == decoded.count('}'):
                         break
                 except UnicodeDecodeError:
-                    continue  # Ждём следующую порцию данных, если декодирование не удалось
+                    continue
             
             logger.debug(f"Получены данные: {len(received)} байт")
             if received:
                 try:
                     parsed_data = json.loads(received.decode('utf-8'))
-                    with lock:
-                        data = parsed_data
-                        logger.info("Данные от ARMA приняты успешно")
+                    if isinstance(parsed_data, dict) and "sides" in parsed_data:
+                        # Это данные от update_data
+                        with lock:
+                            data = parsed_data
+                            logger.info("Данные от ARMA (update_data) приняты успешно")
+                    elif isinstance(parsed_data, list):
+                        # Это репорты
+                        reports_queue.put(dict(parsed_data))  # Преобразуем массив пар в словарь
+                        logger.info("Репорт от ARMA принят успешно")
+                    else:
+                        logger.error("Неизвестный формат данных")
                 except json.JSONDecodeError as e:
                     logger.error(f"Ошибка парсинга JSON: {e}")
                 except UnicodeDecodeError as e:
@@ -53,7 +63,6 @@ def run_server():
             client.close()
         except Exception as e:
             logger.error(f"Ошибка в run_server: {e}")
-            # Продолжаем работу, не завершая поток
 
 def send_to_arma(message):
     try:
@@ -80,4 +89,4 @@ def send_callback_to_arma(message):
 if __name__ == "__main__":
     threading.Thread(target=run_server, daemon=True).start()
     while True:
-        time.sleep(1)  # Держим основной поток активным для теста
+        time.sleep(1)

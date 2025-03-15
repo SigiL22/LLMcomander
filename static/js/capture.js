@@ -7,7 +7,7 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
   const MAP_SIZE_METERS = conf.islandWidth || 15360;
   const MAP_SIZE_PIXELS_ZOOM_7 = conf.mapImageWidth || 32768;
   const PIXELS_PER_METER_ZOOM_7 = MAP_SIZE_PIXELS_ZOOM_7 / MAP_SIZE_METERS;
-  const MAX_WINDOW_SIZE = 1000;
+  const MAX_WINDOW_SIZE = 1500;
   const WINDOW_MARGIN = 0.1;
   const TILE_LOAD_TIMEOUT = 5000;
 
@@ -54,9 +54,9 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
     <html>
       <head>
         <title>Map Preview</title>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-        <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+		<link rel="stylesheet" href="/static/leaflet/leaflet.css" />
+        <script src="/static/leaflet/leaflet.js"></script>
+        <script src="/static/html2canvas/html2canvas.min.js"></script> <!-- Локальный html2canvas -->
         <script src="js/config.js"></script>
         <script src="js/gameToLatLng.js"></script>
         <script src="js/gridLayer.js"></script>

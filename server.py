@@ -7,6 +7,7 @@ from flask import Flask, send_from_directory, abort, request, jsonify, Response
 import arma_connector
 import time
 import json
+from queue import Queue
 
 # Указываем путь к static и db явно
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,12 +31,20 @@ TRANSPARENT_TILE = "transparent.png"
 os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
 # Переменная для хранения интервала обновления (в секундах)
-update_interval = 3  # По умолчанию 3 секунды
+update_interval = 5  # По умолчанию 5 секунд
 update_thread = None
 update_running = False
 
+# Очередь для хранения докладов от LLMextension
+reports_queue = Queue()
+
 def send_update_request():
     global update_running
+    # Ждем, пока появятся первые данные от миссии
+    while arma_connector.data is None:
+        time.sleep(3)  # Проверяем каждые 3 секунды
+    logger.info("Миссия стартовала, начинаем отправку update_data")
+    
     while update_running:
         try:
             arma_connector.send_callback_to_arma({"command": "update_data"})
@@ -72,6 +81,17 @@ def arma_data_stream():
             time.sleep(0.1)
     return Response(event_stream(), mimetype="text/event-stream")
 
+@app.route("/reports_stream")
+def reports_stream():
+    def event_stream():
+        while True:
+            if not arma_connector.reports_queue.empty():
+                report = arma_connector.reports_queue.get()
+                logger.debug(f"SSE: Sending report - {report}")
+                yield f"data: {json.dumps(report)}\n\n"
+            time.sleep(0.1)
+    return Response(event_stream(), mimetype="text/event-stream")
+
 @app.route("/send_callback", methods=["POST"])
 def send_callback_endpoint():
     data = request.get_json()
@@ -79,8 +99,13 @@ def send_callback_endpoint():
         logger.error("Неверные параметры в /send_callback")
         return jsonify({"status": "error", "message": "Invalid parameters"}), 400
     try:
-        arma_connector.send_callback_to_arma(data)
-        logger.info(f"Callback отправлен: {data}")
+        # Если это доклад от LLMextension, добавляем в очередь
+        if "t" in data and data["t"] in ["enemy_detected", "vehicle_detected"]:
+            reports_queue.put(data)
+            logger.info(f"Получен доклад от LLMextension: {data}")
+        else:
+            arma_connector.send_callback_to_arma(data)
+            logger.info(f"Callback отправлен в Arma: {data}")
         return jsonify({"status": "success"}), 200
     except Exception as e:
         logger.error(f"Ошибка в /send_callback: {e}")
@@ -121,16 +146,21 @@ def serve_index():
 
 @app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
 def get_tile(z, x, y):
+    logger.debug(f"Запрос тайла: z={z}, x={x}, y={y}")
     if x < 0 or y < 0:
+        logger.debug(f"Тайл вне границ: {z}/{x}/{y}, возвращаем {TRANSPARENT_TILE}")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
     tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
     tile_filename = f"{y}.png"
     tile_path = os.path.join(tile_dir, tile_filename)
+    logger.debug(f"Путь к тайлу: {tile_path}")
     if os.path.exists(tile_path):
+        logger.debug(f"Тайл найден: {tile_path}")
         response = send_from_directory(tile_dir, tile_filename)
         response.cache_control.max_age = CACHE_TIMEOUT
         response.cache_control.public = True
         return response
+    logger.warning(f"Тайл не найден: {tile_path}, возвращаем {TRANSPARENT_TILE}")
     return send_from_directory(app.static_folder, TRANSPARENT_TILE)
 
 @app.route("/save_snapshot", methods=["POST"])
@@ -213,12 +243,11 @@ def send_to_arma_endpoint():
         logger.error(f"Ошибка отправки в ARMA: {e}")
         abort(500)
 
-# Новые эндпоинты для работы с базами зданий и названий
 @app.route("/get_buildings", methods=["POST"])
 def get_buildings():
     area = request.get_json()
     min_x, max_x, min_y, max_y = area['minX'], area['maxX'], area['minY'], area['maxY']
-    db_path = os.path.join(DB_DIR, "buildings.db")  # Путь к базе buildings.db
+    db_path = os.path.join(DB_DIR, "buildings.db")
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -233,12 +262,11 @@ def get_buildings():
         logger.error(f"Ошибка получения зданий: {e}")
         abort(500)
 
-# Новый маршрут для названий в области
 @app.route("/get_names_in_area", methods=["POST"])
 def get_names_in_area():
     area = request.get_json()
     min_x, max_x, min_y, max_y = area['minX'], area['maxX'], area['minY'], area['maxY']
-    db_path = os.path.join(DB_DIR, "name.db")  # Путь к базе name.db
+    db_path = os.path.join(DB_DIR, "name.db")
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -263,8 +291,8 @@ def save_json():
     content = data["data"]
     file_path = os.path.join(BASE_DIR, filename)
     try:
-        with open(file_path, 'w') as f:
-            json.dump(content, f)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(content, f, ensure_ascii=False)
         logger.info(f"JSON сохранен: {file_path}")
         return jsonify({"status": "success", "filename": filename}), 200
     except Exception as e:

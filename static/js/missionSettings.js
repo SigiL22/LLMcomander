@@ -1,11 +1,10 @@
-// js/missionSettings.js
-
 (function() {
   // Переменные для хранения данных миссии
-  let missionSettings = {
+  window.missionSettings = window.missionSettings || {
     updateInterval: 60, // По умолчанию 60 секунд
     llmSide: null,      // Сторона LLM
-    preset: null        // Предустановка (сторона или группа)
+    preset: null,       // Предустановка (сторона или группа)
+    displaySide: null   // Отображаемая сторона
   };
   let sidesData = {};   // Данные о сторонах и группах из /arma_data
 
@@ -24,7 +23,7 @@
     const stored = localStorage.getItem('missionSettings');
     if (stored) {
       try {
-        missionSettings = JSON.parse(stored);
+        window.missionSettings = JSON.parse(stored);
       } catch (e) {
         console.error("Ошибка парсинга настроек миссии, используются значения по умолчанию", e);
       }
@@ -43,7 +42,7 @@
 
   // Сохранение настроек в localStorage
   function saveSettings() {
-    localStorage.setItem('missionSettings', JSON.stringify(missionSettings));
+    localStorage.setItem('missionSettings', JSON.stringify(window.missionSettings));
   }
 
   // Отображение модального окна настроек миссии
@@ -88,7 +87,7 @@
     intervalInput.id = "updateInterval";
     intervalInput.min = "1";
     intervalInput.max = "60";
-    intervalInput.value = missionSettings.updateInterval;
+    intervalInput.value = window.missionSettings.updateInterval;
     intervalInput.style.width = "80px";
     intervalInput.style.marginBottom = "8px";
     intervalInput.style.verticalAlign = "middle";
@@ -116,11 +115,38 @@
       const option = document.createElement('option');
       option.value = side;
       option.text = side;
-      if (missionSettings.llmSide === side) option.selected = true;
+      if (window.missionSettings.llmSide === side) option.selected = true;
       sideSelect.appendChild(option);
     }
     modal.appendChild(sideLabel);
     modal.appendChild(sideSelect);
+    modal.appendChild(document.createElement('br'));
+
+    // Отображаемая сторона
+    const displaySideLabel = document.createElement('label');
+    displaySideLabel.innerText = "Отображаемая сторона:";
+    displaySideLabel.style.width = "180px";
+    displaySideLabel.style.display = "inline-block";
+    displaySideLabel.style.marginBottom = "5px";
+    displaySideLabel.style.verticalAlign = "middle";
+    const displaySideSelect = document.createElement('select');
+    displaySideSelect.id = "displaySide";
+    displaySideSelect.style.width = "150px";
+    displaySideSelect.style.marginBottom = "8px";
+    displaySideSelect.style.verticalAlign = "middle";
+    const defaultDisplaySideOption = document.createElement('option');
+    defaultDisplaySideOption.value = "";
+    defaultDisplaySideOption.text = "Все стороны";
+    displaySideSelect.appendChild(defaultDisplaySideOption);
+    for (const side in sidesData) {
+      const option = document.createElement('option');
+      option.value = side;
+      option.text = side;
+      if (window.missionSettings.displaySide === side) option.selected = true;
+      displaySideSelect.appendChild(option);
+    }
+    modal.appendChild(displaySideLabel);
+    modal.appendChild(displaySideSelect);
     modal.appendChild(document.createElement('br'));
 
     // Предустановки (сторона или группа)
@@ -143,13 +169,13 @@
       const sideOption = document.createElement('option');
       sideOption.value = side;
       sideOption.text = side;
-      if (missionSettings.preset === side) sideOption.selected = true;
+      if (window.missionSettings.preset === side) sideOption.selected = true;
       presetSelect.appendChild(sideOption);
       sidesData[side].forEach(group => {
         const groupOption = document.createElement('option');
-        groupOption.value = `${side}:${group.n}`; // Префикс стороны
-        groupOption.text = `${side}: ${group.n}`; // Отображение с префиксом
-        if (missionSettings.preset === `${side}:${group.n}`) groupOption.selected = true;
+        groupOption.value = `${side}:${group.n}`;
+        groupOption.text = `${side}: ${group.n}`;
+        if (window.missionSettings.preset === `${side}:${group.n}`) groupOption.selected = true;
         presetSelect.appendChild(groupOption);
       });
     }
@@ -229,48 +255,51 @@
 
     // Обработчики событий
     intervalInput.addEventListener('change', () => {
-      missionSettings.updateInterval = Math.min(Math.max(parseInt(intervalInput.value) || 60, 1), 60);
-      intervalInput.value = missionSettings.updateInterval; // Корректируем значение в поле
+      window.missionSettings.updateInterval = Math.min(Math.max(parseInt(intervalInput.value) || 60, 1), 60);
+      intervalInput.value = window.missionSettings.updateInterval;
     });
     sideSelect.addEventListener('change', () => {
-      missionSettings.llmSide = sideSelect.value;
+      window.missionSettings.llmSide = sideSelect.value;
+    });
+    displaySideSelect.addEventListener('change', () => {
+      window.missionSettings.displaySide = displaySideSelect.value;
     });
     presetSelect.addEventListener('change', () => {
-      missionSettings.preset = presetSelect.value;
+      window.missionSettings.preset = presetSelect.value;
     });
   }
 
   // Отправка команды в игру
-	function sendCommand(commandId, argName, argValue) {
-	  const preset = missionSettings.preset;
-	  if (!preset) {
-		alert("Выберите предустановку (сторона или группа)!");
-		return;
-	  }
-	  const [side, group] = preset.split(':'); // Разделяем "OPFOR:Alpha 1-1" на ["OPFOR", "Alpha 1-1"]
-	  const message = {
-		command: commandId,
-		side: side
-	  };
-	  if (group) {
-		message.group = group;
-	  }
-	  message[argName] = (argName === "direction") ? parseInt(argValue) : argValue;
-	  fetch('/send_callback', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(message)
-	  })
-	  .then(response => response.json())
-	  .then(result => {
-		if (result.status === "success") {
-		  console.log(`Команда ${commandId} успешно отправлена:`, message);
-		} else {
-		  console.error("Ошибка отправки команды:", result);
-		}
-	  })
-	  .catch(err => console.error("Ошибка отправки команды:", err));
-	}
+  function sendCommand(commandId, argName, argValue) {
+    const preset = window.missionSettings.preset;
+    if (!preset) {
+      alert("Выберите предустановку (сторона или группа)!");
+      return;
+    }
+    const [side, group] = preset.split(':');
+    const message = {
+      command: commandId,
+      side: side
+    };
+    if (group) {
+      message.group = group;
+    }
+    message[argName] = (argName === "direction") ? parseInt(argValue) : argValue;
+    fetch('/send_callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message)
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.status === "success") {
+        console.log(`Команда ${commandId} успешно отправлена:`, message);
+      } else {
+        console.error("Ошибка отправки команды:", result);
+      }
+    })
+    .catch(err => console.error("Ошибка отправки команды:", err));
+  }
 
   // Сохранение настроек и обновление интервала
   function saveAndClose() {
@@ -284,7 +313,7 @@
     .then(result => {
       if (result.status === "success") {
         console.log(`Интервал обновления установлен: ${result.interval} сек`);
-        missionSettings.updateInterval = result.interval;
+        window.missionSettings.updateInterval = result.interval;
         saveSettings();
       } else {
         console.error("Ошибка установки интервала:", result);
