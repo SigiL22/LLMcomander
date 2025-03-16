@@ -13,7 +13,7 @@ logger.addHandler(handler)
 
 data = None
 lock = threading.Lock()
-reports_queue = Queue()  # Очередь для репортов
+reports_queue = Queue()
 
 def run_server():
     global data
@@ -46,14 +46,18 @@ def run_server():
                 try:
                     parsed_data = json.loads(received.decode('utf-8'))
                     if isinstance(parsed_data, dict) and "sides" in parsed_data:
-                        # Это данные от update_data
                         with lock:
                             data = parsed_data
                             logger.info("Данные от ARMA (update_data) приняты успешно")
                     elif isinstance(parsed_data, list):
-                        # Это репорты
-                        reports_queue.put(dict(parsed_data))  # Преобразуем массив пар в словарь
-                        logger.info("Репорт от ARMA принят успешно")
+                        # Обрабатываем массив репортов
+                        for report in parsed_data:
+                            if isinstance(report, list):
+                                report_dict = dict(report)  # Преобразуем массив пар в словарь
+                                reports_queue.put(report_dict)
+                                logger.info(f"Репорт от ARMA принят: {report_dict}")
+                            else:
+                                logger.error(f"Неверный формат репорта в массиве: {report}")
                     else:
                         logger.error("Неизвестный формат данных")
                 except json.JSONDecodeError as e:

@@ -1,3 +1,5 @@
+# server.py
+
 import os
 import logging
 import sqlite3
@@ -9,62 +11,54 @@ import time
 import json
 from queue import Queue
 
-# Указываем путь к static и db явно
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 DB_DIR = os.path.join(BASE_DIR, 'db')
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 
-# Настройка логирования (только ошибки и инфо)
 logger = logging.getLogger("Server")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(handler)
 
-# Константы
 TILES_FOLDER = "maps/chernarus/"
 SNAPSHOTS_FOLDER = "snapshots"
 CACHE_TIMEOUT = 86400
 TRANSPARENT_TILE = "transparent.png"
 os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 
-# Переменная для хранения интервала обновления (в секундах)
-update_interval = 5  # По умолчанию 5 секунд
+update_interval = 10  # По умолчанию 10 секунд
 update_thread = None
 update_running = False
+update_lock = threading.Lock()  # Блокировка для управления потоком
 
-# Очередь для хранения докладов от LLMextension
 reports_queue = Queue()
 
 def send_update_request():
     global update_running
-    # Ждем, пока появятся первые данные от миссии
     while arma_connector.data is None:
-        time.sleep(3)  # Проверяем каждые 3 секунды
+        time.sleep(3)
     logger.info("Миссия стартовала, начинаем отправку update_data")
     
     while update_running:
         try:
             arma_connector.send_callback_to_arma({"command": "update_data"})
-            logger.info("Команда update_data отправлена в ARMA")
+            logger.info(f"Команда update_data отправлена в ARMA, следующий вызов через {update_interval} сек")
+            time.sleep(update_interval)
         except Exception as e:
             logger.error(f"Ошибка отправки команды update_data: {e}")
-        time.sleep(update_interval)
+            time.sleep(1)  # Меньшая задержка при ошибке, чтобы не спамить
 
-# Явный маршрут для статических файлов
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    logger.debug(f"Попытка отдать файл: {filename}")
     return send_from_directory(STATIC_DIR, filename)
 
 @app.route("/arma_data", methods=["GET"])
 def get_arma_data():
     with arma_connector.lock:
-        logger.debug(f"GET /arma_data: Current data = {arma_connector.data}")
         if arma_connector.data is None:
-            logger.info("GET /arma_data: No data available")
             return jsonify({"status": "no_data"}), 200
         return jsonify({"status": "success", "data": arma_connector.data}), 200
 
@@ -76,7 +70,6 @@ def arma_data_stream():
             with arma_connector.lock:
                 if arma_connector.data != last_data and arma_connector.data is not None:
                     last_data = arma_connector.data
-                    logger.debug(f"SSE: Sending data - {last_data}")
                     yield f"data: {json.dumps({'status': 'success', 'data': last_data})}\n\n"
             time.sleep(0.1)
     return Response(event_stream(), mimetype="text/event-stream")
@@ -99,11 +92,10 @@ def send_callback_endpoint():
         logger.error("Неверные параметры в /send_callback")
         return jsonify({"status": "error", "message": "Invalid parameters"}), 400
     try:
-        # Если это доклад от LLMextension, добавляем в очередь
         if "t" in data and data["t"] in ["enemy_detected", "vehicle_detected"]:
             reports_queue.put(data)
             logger.info(f"Получен доклад от LLMextension: {data}")
-        else:
+        elif data.get("command") != "update_data":  # Игнорируем update_data через этот эндпоинт
             arma_connector.send_callback_to_arma(data)
             logger.info(f"Callback отправлен в Arma: {data}")
         return jsonify({"status": "success"}), 200
@@ -123,13 +115,15 @@ def set_update_interval():
         logger.error("Интервал должен быть больше 0")
         return jsonify({"status": "error", "message": "Interval must be positive"}), 400
     
-    update_interval = new_interval
-    if update_running:
-        update_running = False
-        update_thread.join()  # Ожидаем завершения старого потока
-    update_running = True
-    update_thread = threading.Thread(target=send_update_request, daemon=True)
-    update_thread.start()
+    with update_lock:
+        update_interval = new_interval
+        if update_running:
+            update_running = False
+            if update_thread:
+                update_thread.join()
+        update_running = True
+        update_thread = threading.Thread(target=send_update_request, daemon=True)
+        update_thread.start()
     logger.info(f"Установлен интервал обновления: {update_interval} секунд")
     return jsonify({"status": "success", "interval": update_interval}), 200
 
@@ -146,21 +140,16 @@ def serve_index():
 
 @app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
 def get_tile(z, x, y):
-    logger.debug(f"Запрос тайла: z={z}, x={x}, y={y}")
     if x < 0 or y < 0:
-        logger.debug(f"Тайл вне границ: {z}/{x}/{y}, возвращаем {TRANSPARENT_TILE}")
         return send_from_directory(app.static_folder, TRANSPARENT_TILE)
     tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
     tile_filename = f"{y}.png"
     tile_path = os.path.join(tile_dir, tile_filename)
-    logger.debug(f"Путь к тайлу: {tile_path}")
     if os.path.exists(tile_path):
-        logger.debug(f"Тайл найден: {tile_path}")
         response = send_from_directory(tile_dir, tile_filename)
         response.cache_control.max_age = CACHE_TIMEOUT
         response.cache_control.public = True
         return response
-    logger.warning(f"Тайл не найден: {tile_path}, возвращаем {TRANSPARENT_TILE}")
     return send_from_directory(app.static_folder, TRANSPARENT_TILE)
 
 @app.route("/save_snapshot", methods=["POST"])

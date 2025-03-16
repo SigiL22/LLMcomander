@@ -10,6 +10,7 @@ const unitIcons = {
     "OPFOR": {
         infantry: L.icon({ iconUrl: '/static/ico/r_inf_r.png', iconSize: [30, 30], iconAnchor: [15, 15] }),
         vehicle: L.icon({ iconUrl: '/static/ico/r_arm_r.png', iconSize: [30, 30], iconAnchor: [15, 15] }),
+        vehicleDestroyed: L.icon({ iconUrl: '/static/ico/arm_dest.png', iconSize: [30, 30], iconAnchor: [15, 15], className: 'vehicle-destroyed' }),
         waypointCurrent: L.icon({ iconUrl: '/static/ico/w_curr.png', iconSize: [20, 20], iconAnchor: [10, 10], className: 'waypoint-opfor-current' }),
         waypointReached: L.icon({ iconUrl: '/static/ico/w_reach.png', iconSize: [20, 20], iconAnchor: [10, 10], className: 'waypoint-opfor-reached' }),
         waypointUnreached: L.icon({ iconUrl: '/static/ico/w_curr.png', iconSize: [20, 20], iconAnchor: [10, 10], className: 'waypoint-opfor-unreached' })
@@ -17,6 +18,7 @@ const unitIcons = {
     "BLUFOR": {
         infantry: L.icon({ iconUrl: '/static/ico/b_inf_s.png', iconSize: [30, 30], iconAnchor: [15, 15] }),
         vehicle: L.icon({ iconUrl: '/static/ico/b_arm_s.png', iconSize: [30, 30], iconAnchor: [15, 15] }),
+        vehicleDestroyed: L.icon({ iconUrl: '/static/ico/arm_dest.png', iconSize: [30, 30], iconAnchor: [15, 15], className: 'vehicle-destroyed' }),
         waypointCurrent: L.icon({ iconUrl: '/static/ico/w_curr.png', iconSize: [20, 20], iconAnchor: [10, 10], className: 'waypoint-blufor-current' }),
         waypointReached: L.icon({ iconUrl: '/static/ico/w_reach.png', iconSize: [20, 20], iconAnchor: [10, 10], className: 'waypoint-blufor-reached' }),
         waypointUnreached: L.icon({ iconUrl: '/static/ico/w_curr.png', iconSize: [20, 20], iconAnchor: [10, 10], className: 'waypoint-blufor-unreached' })
@@ -33,13 +35,11 @@ var UnitLayer = L.Layer.extend({
         this._reportVehicleLayer = L.layerGroup();
         this._lastData = null;
         this.waypointMode = false;
-        this.reports = { infantry: {}, vehicles: {} }; // Хранилище докладов
-        this.savedReports = {}; // Хранилище сохраненных меток
+        this.savedReports = {};
     },
 
     onAdd: function(map) {
         this._map = map;
-        console.log("Добавляем слои на карту");
         this._groupLayer.addTo(map);
         this._vehicleLayer.addTo(map);
         this._labelLayer.addTo(map);
@@ -49,7 +49,6 @@ var UnitLayer = L.Layer.extend({
     },
 
     onRemove: function(map) {
-        console.log("Удаляем слои с карты");
         this._groupLayer.removeFrom(map);
         this._vehicleLayer.removeFrom(map);
         this._labelLayer.removeFrom(map);
@@ -59,54 +58,39 @@ var UnitLayer = L.Layer.extend({
     },
 
     processReports: function(reports) {
-        console.log("Обрабатываем репорты:", reports);
-        if (!reports || reports.length === 0) {
-            console.log("Репорты пустые или отсутствуют");
-            return;
-        }
+        if (!reports || reports.length === 0) return;
         reports.forEach(report => {
-            console.log("Текущий репорт:", report);
             if (report.t === "enemy_detected") {
                 const groupId = report.ge || "unknown";
-                const side = report.se;
-                console.log(`Обнаружен враг: groupId=${groupId}, side=${side}, pos=${report.p}, count=${report.ce}, acc=${report.acc}`);
-                if (!this.reports.infantry[side]) this.reports.infantry[side] = {};
-                this.reports.infantry[side][groupId] = {
-                    pos: report.p,
-                    count: report.ce,
-                    acc: report.acc
-                };
-                console.log(`Добавлен/обновлен репорт пехоты: ${side}/${groupId}`);
-            } else if (report.t === "vehicle_detected") {
+                this.savedReports[groupId] = report;
+            } else if (report.t === "vehicle_detected" || report.t === "vehicle_destroyed") {
                 const vehicleId = report.id;
-                const side = report.se;
-                console.log(`Обнаружена техника: vehicleId=${vehicleId}, side=${side}, type=${report.vehicle_type}, pos=${report.p}, acc=${report.acc}`);
-                if (!this.reports.vehicles[side]) this.reports.vehicles[side] = {};
-                this.reports.vehicles[side][vehicleId] = {
-                    type: report.vehicle_type,
-                    pos: report.p,
-                    acc: report.acc
-                };
-                console.log(`Добавлен/обновлен репорт техники: ${side}/${vehicleId}`);
+                this.savedReports[vehicleId] = report;
+            } else if (report.t === "enemies_cleared") {
+                const groupName = report.g;
+                // Удаляем все репорты enemy_detected от этой группы
+                for (const key in this.savedReports) {
+                    if (this.savedReports[key].t === "enemy_detected" && this.savedReports[key].g === groupName) {
+                        delete this.savedReports[key];
+                        console.log(`Удален репорт enemy_detected от группы ${groupName} для ${key}`);
+                    }
+                }
             }
         });
     },
 
     updateData: function(jsonData, reports = []) {
-        console.log("Вызван updateData с данными:", jsonData);
         if (JSON.stringify(jsonData) === JSON.stringify(this._lastData) && reports.length === 0) {
             console.log("Данные не изменились, пропускаем обновление");
             return;
         }
         this._lastData = jsonData;
 
-        console.log("Очищаем слои точных данных");
         this._groupLayer.clearLayers();
         this._vehicleLayer.clearLayers();
         this._labelLayer.clearLayers();
         this._waypointLayer.clearLayers();
         const conf = Config.get();
-        console.log("Конфигурация карты:", conf);
 
         if (!jsonData || !jsonData.sides) {
             console.error("Некорректные данные от arma_data:", jsonData);
@@ -114,11 +98,9 @@ var UnitLayer = L.Layer.extend({
         }
 
         const displaySide = window.missionSettings.displaySide || "";
-        console.log("Текущая отображаемая сторона (displaySide):", displaySide);
 
         Object.keys(jsonData.sides).forEach(side => {
             const sideData = jsonData.sides[side];
-            console.log(`Обрабатываем сторону: ${side}, групп: ${sideData.length}`);
             sideData.forEach(group => {
                 const groupPos = group.p;
                 const groupLatLng = gameToLatLng(groupPos[0], groupPos[1], conf);
@@ -145,7 +127,6 @@ var UnitLayer = L.Layer.extend({
                 }
 
                 if (!displaySide || displaySide === side) {
-                    console.log(`Отрисовываем группу: ${group.n}, сторона: ${side}`);
                     if (!leaderInVehicle) {
                         const groupMarker = L.marker(groupLatLng, { 
                             icon: groupIcon,
@@ -263,68 +244,41 @@ var UnitLayer = L.Layer.extend({
                         }
                         marker.addTo(this._waypointLayer);
 
-                        const labelIcon = L.divIcon({
-                            html: `<div class="group-label">${group.n} #${wp.i}</div>`,
-                            className: 'label-marker',
-                            iconSize: [100, 20],
-                            iconAnchor: [50, -15]
-                        });
-                        const labelMarker = L.marker(wpLatLng, { icon: labelIcon });
-                        labelMarker.options.data = { group: group.n, waypointIndex: wp.i };
-                        labelMarker.addTo(this._waypointLayer);
+                        L.marker(wpLatLng, {
+                            icon: L.divIcon({
+                                html: `<div class="group-label">${group.n} #${wp.i}</div>`,
+                                className: 'label-marker',
+                                iconSize: [100, 20],
+                                iconAnchor: [50, -15]
+                            })
+                        }).addTo(this._waypointLayer);
                     });
                 }
             });
         });
 
-        // Восстанавливаем сохраненные метки после обновления данных
         this.updateReports(reports);
     },
 
     updateReports: function(reports) {
-        console.log("Вызван updateReports с репортами:", reports);
+        console.log("Получены репорты:", reports);
         const displaySide = window.missionSettings.displaySide || "";
-        console.log("Отображаемая сторона в updateReports:", displaySide);
-
         const armaDisplaySide = displaySide === "OPFOR" ? "EAST" : displaySide === "BLUFOR" ? "WEST" : displaySide;
-        console.log("Скорректированная сторона для Arma:", armaDisplaySide);
-
         const filteredReports = armaDisplaySide ? reports.filter(report => report.s === armaDisplaySide) : reports;
-        console.log("Отфильтрованные репорты:", filteredReports);
         this.processReports(filteredReports);
 
-        // Обновляем сохраненные репорты последними данными
-        filteredReports.forEach(report => {
-            if (report.t === "enemy_detected") {
-                const groupId = report.ge || "unknown";
-                this.savedReports[groupId] = report;
-                console.log(`Сохранен последний репорт для группы ${groupId}`);
-            } else if (report.t === "vehicle_detected") {
-                const vehicleId = report.id;
-                this.savedReports[vehicleId] = report;
-                console.log(`Сохранен последний репорт для техники ${vehicleId}`);
-            }
-        });
-
-        console.log("Очищаем слои репортов");
         this._reportGroupLayer.clearLayers();
         this._reportVehicleLayer.clearLayers();
         const conf = Config.get();
-        console.log("Конфигурация для updateReports:", conf);
 
-        // Отрисовываем сохраненные репорты
         Object.values(this.savedReports).forEach(report => {
-            const enemySide = report.se;
+            const enemySide = report.se || "UNKNOWN";
             const armaEnemySide = enemySide === "EAST" ? "OPFOR" : enemySide === "WEST" ? "BLUFOR" : enemySide;
-            console.log(`Проверяем репорт: своя сторона=${armaDisplaySide}, сторона противника=${enemySide}`);
             if (armaDisplaySide && armaDisplaySide !== enemySide) {
-                console.log(`Условие выполнено: отображаем маркер противника для ${enemySide}`);
-                
                 const markerSide = armaDisplaySide === "EAST" ? "BLUFOR" : "OPFOR";
                 if (report.t === "enemy_detected") {
                     const groupId = report.ge || "unknown";
                     const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
-                    console.log(`Координаты маркера противника (пехота): ${enemyLatLng.lat}, ${enemyLatLng.lng}`);
                     const enemyIcon = unitIcons[markerSide].infantry;
                     const enemyTooltip = `
                         <b>${groupId}</b><br>
@@ -335,32 +289,27 @@ var UnitLayer = L.Layer.extend({
                     const enemyMarker = L.marker(enemyLatLng, { 
                         icon: enemyIcon,
                         data: { side: enemySide, group: groupId }
-                    });
-                    console.log(`Добавляем маркер пехоты противника для ${groupId} на слой _reportGroupLayer с иконкой ${markerSide}`);
-                    enemyMarker.addTo(this._reportGroupLayer);
+                    }).addTo(this._reportGroupLayer);
                     enemyMarker.bindTooltip(enemyTooltip, { 
                         direction: 'top', 
                         offset: [0, -15], 
                         className: 'group-tooltip'
                     });
 
-                    const labelMarker = L.marker(enemyLatLng, {
+                    L.marker(enemyLatLng, {
                         icon: L.divIcon({
                             html: `<div class="group-label">${groupId} (${report.ce})</div>`,
                             className: 'label-marker',
                             iconSize: [100, 20],
                             iconAnchor: [50, -15]
                         })
-                    });
-                    console.log("Добавляем метку пехоты противника на слой _reportGroupLayer");
-                    labelMarker.addTo(this._reportGroupLayer);
+                    }).addTo(this._reportGroupLayer);
                 } else if (report.t === "vehicle_detected") {
                     const vehicleId = report.id;
                     const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
-                    console.log(`Координаты маркера противника (техника): ${enemyLatLng.lat}, ${enemyLatLng.lng}`);
                     const vehIcon = unitIcons[markerSide].vehicle;
                     const vehTooltip = `
-                        <b>${report.vehicle_type}</b><br>
+                        <b>${report.vehicle_name || report.vehicle_type}</b><br>
                         ID: ${vehicleId}<br>
                         Сторона: ${enemySide}<br>
                         Точность: ${report.acc} м
@@ -368,30 +317,49 @@ var UnitLayer = L.Layer.extend({
                     const vehMarker = L.marker(enemyLatLng, { 
                         icon: vehIcon,
                         data: { side: enemySide, vehicleId: vehicleId }
-                    });
-                    console.log(`Добавляем маркер техники противника для ${vehicleId} на слой _reportVehicleLayer с иконкой ${markerSide}`);
-                    vehMarker.addTo(this._reportVehicleLayer);
+                    }).addTo(this._reportVehicleLayer);
                     vehMarker.bindTooltip(vehTooltip, { 
                         direction: 'top', 
                         offset: [0, -15], 
                         className: 'vehicle-tooltip'
                     });
 
-                    const labelMarker = L.marker(enemyLatLng, {
+                    L.marker(enemyLatLng, {
                         icon: L.divIcon({
-                            html: `<div class="vehicle-label">${report.vehicle_type}</div>`,
+                            html: `<div class="vehicle-label">${report.vehicle_name || report.vehicle_type}</div>`,
                             className: 'label-marker',
                             iconSize: [100, 20],
                             iconAnchor: [50, -15]
                         })
+                    }).addTo(this._reportVehicleLayer);
+                } else if (report.t === "vehicle_destroyed") {
+                    const vehicleId = report.id;
+                    const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
+                    const vehIcon = unitIcons[markerSide].vehicleDestroyed;
+                    const vehTooltip = `
+                        <b>${report.vehicle_name || report.vehicle_type}</b> (уничтожена)<br>
+                        ID: ${vehicleId}<br>
+                        Сторона: ${enemySide}
+                    `;
+                    const vehMarker = L.marker(enemyLatLng, { 
+                        icon: vehIcon,
+                        data: { side: enemySide, vehicleId: vehicleId }
+                    }).addTo(this._reportVehicleLayer);
+                    vehMarker.bindTooltip(vehTooltip, { 
+                        direction: 'top', 
+                        offset: [0, -15], 
+                        className: 'vehicle-tooltip destroyed'
                     });
-                    console.log("Добавляем метку техники противника на слой _reportVehicleLayer");
-                    labelMarker.addTo(this._reportVehicleLayer);
-                } else {
-                    console.log(`Репорт с типом ${report.t} не поддерживается для отрисовки`);
+
+                    L.marker(enemyLatLng, {
+                        icon: L.divIcon({
+                            html: `<div class="vehicle-label">${report.vehicle_name || report.vehicle_type} (X)</div>`,
+                            className: 'label-marker destroyed',
+                            iconSize: [100, 20],
+                            iconAnchor: [50, -15]
+                        })
+                    }).addTo(this._reportVehicleLayer);
                 }
-            } else {
-                console.log(`Репорт не отрисовывается: armaDisplaySide=${armaDisplaySide}, enemySide=${enemySide}`);
             }
         });
     }
@@ -420,6 +388,16 @@ style.innerHTML = `
         font-size: 12px;
         background-color: rgba(255, 255, 255, 0.9);
         border: 1px solid #ccc;
+    }
+    .vehicle-tooltip.destroyed {
+        background-color: rgba(255, 0, 0, 0.9); /* Красный фон для уничтоженной техники */
+        color: #fff;
+    }
+    .label-marker.destroyed {
+        color: #ff0000; /* Красный текст для метки */
+    }
+    .vehicle-destroyed {
+        filter: grayscale(100%) opacity(0.7); /* Серый и полупрозрачный эффект */
     }
     .waypoint-opfor-current {
         filter: hue-rotate(0deg) saturate(3) brightness(1.2);
