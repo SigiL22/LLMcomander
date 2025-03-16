@@ -35,7 +35,7 @@ var UnitLayer = L.Layer.extend({
         this._reportVehicleLayer = L.layerGroup();
         this._lastData = null;
         this.waypointMode = false;
-        this.savedReports = {};
+        this.savedReports = JSON.parse(localStorage.getItem('savedReports')) || {};
     },
 
     onAdd: function(map) {
@@ -46,6 +46,9 @@ var UnitLayer = L.Layer.extend({
         this._waypointLayer.addTo(map);
         this._reportGroupLayer.addTo(map);
         this._reportVehicleLayer.addTo(map);
+        if (window.missionSettings) {
+            this.updateReports([]);
+        }
     },
 
     onRemove: function(map) {
@@ -68,21 +71,41 @@ var UnitLayer = L.Layer.extend({
                 this.savedReports[vehicleId] = report;
             } else if (report.t === "enemies_cleared") {
                 const groupName = report.g;
-                // Удаляем все репорты enemy_detected от этой группы
+                const clearedPos = report.p;
                 for (const key in this.savedReports) {
-                    if (this.savedReports[key].t === "enemy_detected" && this.savedReports[key].g === groupName) {
-                        delete this.savedReports[key];
-                        console.log(`Удален репорт enemy_detected от группы ${groupName} для ${key}`);
+                    const savedReport = this.savedReports[key];
+                    if (savedReport.t === "enemy_detected") {
+                        if (savedReport.g === groupName) {
+                            delete this.savedReports[key];
+                            console.log(`Удален репорт enemy_detected от группы ${groupName} для ${key} (по группе)`);
+                        }
+                        else if (clearedPos) {
+                            const enemyPos = savedReport.p;
+                            const distance = Math.sqrt(
+                                Math.pow(clearedPos[0] - enemyPos[0], 2) +
+                                Math.pow(clearedPos[1] - enemyPos[1], 2)
+                            );
+                            if (distance < 200) {
+                                delete this.savedReports[key];
+                                console.log(`Удален репорт enemy_detected для ${key} группой ${groupName} на расстоянии ${distance} м`);
+                            }
+                        }
                     }
                 }
             }
         });
+        localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
     },
 
     updateData: function(jsonData, reports = []) {
         if (JSON.stringify(jsonData) === JSON.stringify(this._lastData) && reports.length === 0) {
             console.log("Данные не изменились, пропускаем обновление");
             return;
+        }
+        if (this._lastData === null && jsonData && jsonData.sides) {
+            this.savedReports = {};
+            localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
+            console.log("Новая миссия началась, сохраненные репорты очищены");
         }
         this._lastData = jsonData;
 
@@ -262,6 +285,10 @@ var UnitLayer = L.Layer.extend({
 
     updateReports: function(reports) {
         console.log("Получены репорты:", reports);
+        if (!window.missionSettings) {
+            console.log("missionSettings еще не загружен, пропускаем отрисовку репортов");
+            return;
+        }
         const displaySide = window.missionSettings.displaySide || "";
         const armaDisplaySide = displaySide === "OPFOR" ? "EAST" : displaySide === "BLUFOR" ? "WEST" : displaySide;
         const filteredReports = armaDisplaySide ? reports.filter(report => report.s === armaDisplaySide) : reports;
@@ -390,14 +417,14 @@ style.innerHTML = `
         border: 1px solid #ccc;
     }
     .vehicle-tooltip.destroyed {
-        background-color: rgba(255, 0, 0, 0.9); /* Красный фон для уничтоженной техники */
+        background-color: rgba(255, 0, 0, 0.9);
         color: #fff;
     }
     .label-marker.destroyed {
-        color: #ff0000; /* Красный текст для метки */
+        color: #ff0000;
     }
     .vehicle-destroyed {
-        filter: grayscale(100%) opacity(0.7); /* Серый и полупрозрачный эффект */
+        filter: grayscale(100%) opacity(0.7);
     }
     .waypoint-opfor-current {
         filter: hue-rotate(0deg) saturate(3) brightness(1.2);
