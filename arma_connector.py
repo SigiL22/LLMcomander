@@ -44,22 +44,28 @@ def run_server():
             logger.debug(f"Получены данные: {len(received)} байт")
             if received:
                 try:
-                    parsed_data = json.loads(received.decode('utf-8'))
-                    if isinstance(parsed_data, dict) and "sides" in parsed_data:
+                    decoded_data = received.decode('utf-8')
+                    if decoded_data == "[start_mission]":
                         with lock:
-                            data = parsed_data
-                            logger.info("Данные от ARMA (update_data) приняты успешно")
-                    elif isinstance(parsed_data, list):
-                        # Обрабатываем массив репортов
-                        for report in parsed_data:
-                            if isinstance(report, list):
-                                report_dict = dict(report)  # Преобразуем массив пар в словарь
-                                reports_queue.put(report_dict)
-                                logger.info(f"Репорт от ARMA принят: {report_dict}")
-                            else:
-                                logger.error(f"Неверный формат репорта в массиве: {report}")
+                            data = None  # Сбрасываем данные миссии
+                        reports_queue.put({"command": "start_mission"})
+                        logger.info("Получена команда start_mission от ARMA, данные миссии сброшены")
                     else:
-                        logger.error("Неизвестный формат данных")
+                        parsed_data = json.loads(decoded_data)
+                        if isinstance(parsed_data, dict) and "sides" in parsed_data:
+                            with lock:
+                                data = parsed_data
+                                logger.info("Данные от ARMA (update_data) приняты успешно")
+                        elif isinstance(parsed_data, list):
+                            for report in parsed_data:
+                                if isinstance(report, list):
+                                    report_dict = dict(report)
+                                    reports_queue.put(report_dict)
+                                    logger.info(f"Репорт от ARMA принят: {report_dict}")
+                                else:
+                                    logger.error(f"Неверный формат репорта в массиве: {report}")
+                        else:
+                            logger.error("Неизвестный формат данных")
                 except json.JSONDecodeError as e:
                     logger.error(f"Ошибка парсинга JSON: {e}")
                 except UnicodeDecodeError as e:
