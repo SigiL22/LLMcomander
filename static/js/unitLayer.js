@@ -36,6 +36,7 @@ var UnitLayer = L.Layer.extend({
         this._lastData = null;
         this.waypointMode = false;
         this.savedReports = JSON.parse(localStorage.getItem('savedReports')) || {};
+        this.startMissionProcessed = false; // Флаг обработки start_mission
     },
 
     onAdd: function(map) {
@@ -62,8 +63,16 @@ var UnitLayer = L.Layer.extend({
 
     processReports: function(reports) {
         if (!reports || reports.length === 0) return;
-        reports.forEach(report => {
-            if (report.t === "enemy_detected") {
+        for (const report of reports) {
+            if (report.command === "start_mission" && !this.startMissionProcessed) {
+                this.savedReports = {};
+                localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
+                this.startMissionProcessed = true;
+                this._reportGroupLayer.clearLayers(); // Очищаем слой пехоты
+                this._reportVehicleLayer.clearLayers(); // Очищаем слой техники
+                console.log("Получена команда start_mission, сохраненные репорты и маркеры очищены");
+                return; // Прерываем обработку
+            } else if (report.t === "enemy_detected") {
                 const groupId = report.ge || "unknown";
                 this.savedReports[groupId] = report;
             } else if (report.t === "vehicle_detected" || report.t === "vehicle_destroyed") {
@@ -78,8 +87,7 @@ var UnitLayer = L.Layer.extend({
                         if (savedReport.g === groupName) {
                             delete this.savedReports[key];
                             console.log(`Удален репорт enemy_detected от группы ${groupName} для ${key} (по группе)`);
-                        }
-                        else if (clearedPos) {
+                        } else if (clearedPos) {
                             const enemyPos = savedReport.p;
                             const distance = Math.sqrt(
                                 Math.pow(clearedPos[0] - enemyPos[0], 2) +
@@ -93,7 +101,7 @@ var UnitLayer = L.Layer.extend({
                     }
                 }
             }
-        });
+        }
         localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
     },
 
@@ -101,11 +109,6 @@ var UnitLayer = L.Layer.extend({
         if (JSON.stringify(jsonData) === JSON.stringify(this._lastData) && reports.length === 0) {
             console.log("Данные не изменились, пропускаем обновление");
             return;
-        }
-        if (this._lastData === null && jsonData && jsonData.sides) {
-            this.savedReports = {};
-            localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
-            console.log("Новая миссия началась, сохраненные репорты очищены");
         }
         this._lastData = jsonData;
 
@@ -291,7 +294,7 @@ var UnitLayer = L.Layer.extend({
         }
         const displaySide = window.missionSettings.displaySide || "";
         const armaDisplaySide = displaySide === "OPFOR" ? "EAST" : displaySide === "BLUFOR" ? "WEST" : displaySide;
-        const filteredReports = armaDisplaySide ? reports.filter(report => report.s === armaDisplaySide) : reports;
+        const filteredReports = armaDisplaySide ? reports.filter(report => report.s === armaDisplaySide || report.command === "start_mission") : reports;
         this.processReports(filteredReports);
 
         this._reportGroupLayer.clearLayers();
