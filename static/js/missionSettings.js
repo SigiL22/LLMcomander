@@ -4,9 +4,11 @@
     updateInterval: 60, // По умолчанию 60 секунд
     llmSide: null,      // Сторона LLM
     preset: null,       // Предустановка (сторона или группа)
-    displaySide: null   // Отображаемая сторона
+    displaySide: null,  // Отображаемая сторона
+    llmModel: null      // Выбранная модель LLM
   };
   let sidesData = {};   // Данные о сторонах и группах из /arma_data
+  let availableModels = []; // Список доступных моделей LLM
 
   // Создание тулбара для открытия настроек миссии
   function createMissionSettingsToolbar() {
@@ -18,7 +20,7 @@
     toolbar.appendChild(btn);
   }
 
-  // Загрузка настроек из localStorage
+  // Загрузка настроек из localStorage и данных о моделях LLM
   function loadSettings() {
     const stored = localStorage.getItem('missionSettings');
     if (stored) {
@@ -38,6 +40,18 @@
         }
       })
       .catch(err => console.error("Ошибка загрузки данных о сторонах:", err));
+    // Загрузка списка моделей LLM
+    fetch('/llm_models')
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === "success") {
+          availableModels = data.models;
+          console.log("Доступные модели LLM:", availableModels);
+        } else {
+          console.error("Ошибка получения моделей LLM:", data);
+        }
+      })
+      .catch(err => console.error("Ошибка запроса списка моделей LLM:", err));
   }
 
   // Сохранение настроек в localStorage
@@ -182,6 +196,33 @@
     modal.appendChild(presetLabel);
     modal.appendChild(presetSelect);
     modal.appendChild(document.createElement('br'));
+
+    // Выбор модели LLM
+    const modelLabel = document.createElement('label');
+    modelLabel.innerText = "Модель LLM:";
+    modelLabel.style.width = "180px";
+    modelLabel.style.display = "inline-block";
+    modelLabel.style.marginBottom = "5px";
+    modelLabel.style.verticalAlign = "middle";
+    const modelSelect = document.createElement('select');
+    modelSelect.id = "llmModel";
+    modelSelect.style.width = "150px";
+    modelSelect.style.marginBottom = "8px";
+    modelSelect.style.verticalAlign = "middle";
+    const defaultModelOption = document.createElement('option');
+    defaultModelOption.value = "";
+    defaultModelOption.text = "Выберите модель";
+    modelSelect.appendChild(defaultModelOption);
+    availableModels.forEach(model => {
+      const option = document.createElement('option');
+      option.value = model;
+      option.text = model;
+      if (window.missionSettings.llmModel === model) option.selected = true;
+      modelSelect.appendChild(option);
+    });
+    modal.appendChild(modelLabel);
+    modal.appendChild(modelSelect);
+    modal.appendChild(document.createElement('br'));
     modal.appendChild(document.createElement('br'));
 
     // Команды поведения AI
@@ -266,6 +307,31 @@
     });
     presetSelect.addEventListener('change', () => {
       window.missionSettings.preset = presetSelect.value;
+    });
+    modelSelect.addEventListener('change', () => {
+      const newModel = modelSelect.value;
+      if (newModel) {
+        fetch('/set_llm_model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: newModel })
+        })
+        .then(response => response.json())
+        .then(result => {
+          if (result.status === "success") {
+            window.missionSettings.llmModel = newModel;
+            saveSettings();
+            console.log(`Модель LLM изменена на ${newModel}`);
+          } else {
+            console.error("Ошибка смены модели:", result);
+            modelSelect.value = window.missionSettings.llmModel || "";
+          }
+        })
+        .catch(err => {
+          console.error("Ошибка отправки запроса на смену модели:", err);
+          modelSelect.value = window.missionSettings.llmModel || "";
+        });
+      }
     });
   }
 

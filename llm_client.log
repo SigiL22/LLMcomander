@@ -1,0 +1,105 @@
+2025-03-19 16:01:07,086 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 16:01:08,188 - INFO - Модель gemini-2.0-flash доступна
+2025-03-19 16:01:08,189 - INFO - Инициализирована модель gemini-2.0-flash
+2025-03-19 16:01:08,190 - INFO - Создание chat_session для arma_session
+2025-03-19 16:01:08,191 - INFO - Сессия arma_session создана
+2025-03-19 16:09:26,733 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 16:09:27,370 - INFO - Модель gemini-2.0-flash доступна
+2025-03-19 16:09:27,371 - INFO - Инициализирована модель gemini-2.0-flash
+2025-03-19 16:09:27,371 - INFO - Создание chat_session для arma_session
+2025-03-19 16:09:27,374 - INFO - LLM отправка (попытка 1): Ты командир в Arma 3. Анализируй данные миссии и отдавай команды в формате JSON.
+2025-03-19 16:09:30,942 - INFO - LLM ответ: {
+  "mission_analysis": {
+    "threat_assessment": "Moderate. Enemy infantry presence confirmed in sectors A and B. Light armored vehicles suspected in sector C. Air threat is low, but possible.",
+    "friendly_forces": "Alpha Team (4 men), Bravo Team (4 men), Support Element (medic, engineer).",
+    "objective": "Secure sectors A, B, and C. Eliminate all enemy forces.",
+    "time_available": "60 minutes",
+    "terrain": "Urban environment with multi-story buildings and narrow streets."
+  },
+  "command_orders": [
+    {
+      "team": "Alpha",
+      "task": "Advance and secure sector A. Prioritize rooftop positions for overwatch.",
+      "location": "Sector A",
+      "priority": "High",
+      "time_limit": "20 minutes"
+    },
+    {
+      "team": "Bravo",
+      "task": "Advance and secure sector B. Clear buildings systematically, room by room.",
+      "location": "Sector B",
+      "priority": "High",
+      "time_limit": "20 minutes"
+    },
+    {
+      "team": "Support",
+      "task": "Establish a forward operating base (FOB) in a secure location between sectors A and B. Provide medical support and engineering assistance as needed.",
+      "location": "Between Sector A and B",
+      "priority": "Medium",
+      "time_limit": "15 minutes"
+    },
+    {
+      "team": "Alpha and Bravo",
+      "task": "Once sectors A and B are secured, coordinate an assault on sector C. Be prepared for light armored vehicles.",
+      "location": "Sector C",
+      "priority": "High",
+      "time_limit": "30 minutes",
+      "contingency": "If armored vehicles are encountered, request air support or utilize anti-tank weaponry."
+    }
+  ],
+  "communication_protocol": "Use designated radio frequencies for inter-team communication. Report enemy contacts immediately. Request support via command channel."
+}
+2025-03-19 16:09:30,948 - INFO - Сессия arma_session создана и системный промпт отправлен
+2025-03-19 16:13:47,622 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 16:13:48,267 - INFO - Модель gemini-2.0-flash доступна
+2025-03-19 16:13:48,268 - INFO - Инициализирована модель gemini-2.0-flash
+2025-03-19 16:13:48,268 - INFO - Создание chat_session для arma_session
+2025-03-19 16:13:48,268 - INFO - Сессия arma_session создана
+2025-03-19 16:14:18,655 - INFO - Модель изменена на gemini-2.0-pro-exp-02-05
+2025-03-19 16:14:18,655 - WARNING - Сессия arma_session уже существует.
+2025-03-19 16:43:34,283 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 16:43:34,834 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-03-19 16:43:34,834 - WARNING - Модель gemini-2.0-flash не найдена в списке доступных: []
+2025-03-19 16:43:34,835 - INFO - Инициализирована модель gemini-2.0-flash
+2025-03-19 16:43:34,835 - INFO - Создание chat_session для arma_session
+2025-03-19 16:43:34,835 - INFO - Сессия arma_session создана
+2025-03-19 16:43:45,276 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-03-19 16:44:04,399 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-03-19 16:53:47,691 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 16:53:49,397 - INFO - Модель gemini-2.0-flash доступна
+2025-03-19 16:53:49,397 - INFO - Инициализирована модель gemini-2.0-flash
+2025-03-19 16:53:49,397 - INFO - Создание chat_session для arma_session
+2025-03-19 16:53:49,398 - INFO - Сессия arma_session создана
+2025-03-19 16:55:11,057 - INFO - Модель изменена на gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 16:55:11,057 - INFO - Сессия arma_session обновлена с моделью gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 16:55:11,058 - INFO - Конфигурация сохранена в config.json
+2025-03-19 17:19:22,056 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 17:19:22,706 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:19:22,706 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:19:22,707 - INFO - Создание chat_session для arma_session
+2025-03-19 17:19:22,707 - INFO - Сессия arma_session создана
+2025-03-19 17:25:12,892 - ERROR - Ошибка чтения системного промта: system_prompt.txt пустой
+2025-03-19 17:25:13,476 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:25:13,476 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:25:13,476 - INFO - Создание chat_session для arma_session
+2025-03-19 17:25:13,477 - INFO - Сессия arma_session создана
+2025-03-19 17:35:05,514 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:35:05,515 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:35:05,515 - INFO - Создание chat_session для arma_session
+2025-03-19 17:35:05,515 - INFO - Сессия arma_session создана
+2025-03-19 17:37:39,082 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:37:39,083 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:37:39,083 - INFO - Создание chat_session для arma_session
+2025-03-19 17:37:39,083 - INFO - Сессия arma_session создана
+2025-03-19 17:44:37,349 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:44:37,350 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:44:37,350 - INFO - Создание chat_session для arma_session
+2025-03-19 17:44:37,351 - INFO - Сессия arma_session создана
+2025-03-19 17:51:53,805 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:51:53,805 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:51:53,806 - INFO - Создание chat_session для arma_session
+2025-03-19 17:51:53,806 - INFO - Сессия arma_session создана
+2025-03-19 17:58:11,534 - INFO - Модель gemini-2.0-flash-thinking-exp-01-21 доступна
+2025-03-19 17:58:11,535 - INFO - Инициализирована модель gemini-2.0-flash-thinking-exp-01-21
+2025-03-19 17:58:11,535 - INFO - Создание chat_session для arma_session
+2025-03-19 17:58:11,535 - INFO - Сессия arma_session создана

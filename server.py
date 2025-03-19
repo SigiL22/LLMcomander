@@ -1,15 +1,15 @@
-# server.py
-
 import os
 import logging
 import sqlite3
 import base64
 import threading
+import asyncio
 from flask import Flask, send_from_directory, abort, request, jsonify, Response
 import arma_connector
 import time
 import json
 from queue import Queue
+from llm_client import LLMClient
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
@@ -35,6 +35,8 @@ update_running = False
 update_lock = threading.Lock()  # Блокировка для управления потоком
 
 reports_queue = Queue()
+llm_client = None  # Глобальный объект LLMClient
+system_prompt_sent = False  # Флаг отправки системного промпта
 
 def send_update_request():
     global update_running
@@ -288,10 +290,67 @@ def save_json():
         logger.error(f"Ошибка сохранения JSON: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/llm_models", methods=["GET"])
+def get_llm_models():
+    global llm_client
+    if not llm_client:
+        return jsonify({"status": "error", "message": "LLMClient не инициализирован"}), 500
+    models = llm_client.get_available_models()
+    return jsonify({"status": "success", "models": models}), 200
+
+@app.route("/set_llm_model", methods=["POST"])
+def set_llm_model():
+    global llm_client
+    if not llm_client:
+        return jsonify({"status": "error", "message": "LLMClient не инициализирован"}), 500
+    data = request.get_json()
+    model_name = data.get("model")
+    if not model_name:
+        return jsonify({"status": "error", "message": "Отсутствует model"}), 400
+    if llm_client.set_model(model_name):
+        return jsonify({"status": "success", "model": model_name}), 200
+    return jsonify({"status": "error", "message": "Ошибка смены модели"}), 500
+
+@app.route("/llm_command", methods=["POST"])
+async def llm_command():
+    global llm_client, system_prompt_sent
+    if not llm_client or "arma_session" not in llm_client.chat_sessions:
+        return jsonify({"status": "error", "message": "LLM сессия не инициализирована"}), 500
+    
+    if not system_prompt_sent:
+        return jsonify({"status": "error", "message": "Системный промпт еще не отправлен, ждите начала миссии"}), 503
+    
+    data = request.get_json()
+    if not data or "json_input" not in data:
+        return jsonify({"status": "error", "message": "Отсутствует json_input"}), 400
+    
+    json_input = data["json_input"]
+    png_path = data.get("png_path")  # Опционально
+    
+    try:
+        response = await llm_client.send_message("arma_session", json_input, png_path)
+        if response:
+            if "commands" in response:
+                for cmd in response["commands"]:
+                    arma_connector.send_callback_to_arma(cmd)
+            return jsonify({"status": "success", "response": response}), 200
+        else:
+            return jsonify({"status": "error", "message": "Пустой ответ от LLM"}), 500
+    except Exception as e:
+        logger.error(f"Ошибка в llm_command: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 if __name__ == "__main__":
+    llm_client = LLMClient(config_file="config.json", system_prompt_file="system_prompt.txt")
+    session_id = "arma_session"
+    if not llm_client.create_session(session_id):
+        logger.error("Не удалось создать сессию LLM. Сервер продолжает работу без LLM.")
+    else:
+        logger.info("LLM сессия успешно создана")
+    
     threading.Thread(target=arma_connector.run_server, daemon=True).start()
     update_running = True
     update_thread = threading.Thread(target=send_update_request, daemon=True)
-    update_thread.start()
+    update_thread.start()  # Запускаем только один поток
     logger.info("Сервер запущен на http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)

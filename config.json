@@ -1,0 +1,5 @@
+{
+    "geminy_api_key": "AIzaSyBxmvilzVWCV7Mx_XoPFLEcSTHUd_-hwuo",
+    "geminy_api_url": "https://api.gemini.googleapis.com/v1",
+    "model": "gemini-2.0-flash-thinking-exp-01-21"
+}

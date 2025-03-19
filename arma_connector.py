@@ -1,8 +1,8 @@
-# arma_connector.py
 import socket
 import json
 import threading
 import logging
+import asyncio
 from queue import Queue
 
 logger = logging.getLogger("ArmaConnector")
@@ -14,6 +14,19 @@ logger.addHandler(handler)
 data = None
 lock = threading.Lock()
 reports_queue = Queue()
+
+# Внешняя ссылка на llm_client и system_prompt_sent из server.py
+from server import llm_client, system_prompt_sent
+
+async def send_system_prompt_async():
+    """Асинхронная отправка системного промпта."""
+    global system_prompt_sent
+    if llm_client and "arma_session" in llm_client.chat_sessions and not system_prompt_sent:
+        try:
+            await llm_client.send_system_prompt("arma_session")
+            system_prompt_sent = True
+        except Exception as e:
+            logger.error(f"Ошибка при асинхронной отправке системного промпта: {e}")
 
 def run_server():
     global data
@@ -50,6 +63,9 @@ def run_server():
                             data = None  # Сбрасываем данные миссии
                         reports_queue.put({"command": "start_mission"})
                         logger.info("Получена команда start_mission от ARMA, данные миссии сброшены")
+                        # Отправляем системный промпт асинхронно через цикл событий Flask
+                        loop = asyncio.get_event_loop()
+                        loop.create_task(send_system_prompt_async())
                     else:
                         parsed_data = json.loads(decoded_data)
                         if isinstance(parsed_data, dict) and "sides" in parsed_data:
