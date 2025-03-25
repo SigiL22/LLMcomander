@@ -325,24 +325,33 @@
     }
   }
   
-  function createSettingsToolbar() {
-    var toolbar = document.createElement('div');
-    toolbar.id = "settingsToolbar";
-    toolbar.style.position = "absolute";
-    toolbar.style.top = "10px";
-    toolbar.style.left = "10px";
-    toolbar.style.zIndex = "1000";
+	function createSettingsToolbar() {
+		var toolbar = document.createElement('div');
+		toolbar.id = "settingsToolbar";
+		toolbar.style.position = "absolute";
+		toolbar.style.top = "10px";
+		toolbar.style.left = "320px";
+		toolbar.style.zIndex = "1000";
+		toolbar.style.display = "flex"; // Выравниваем кнопки горизонтально
+		toolbar.style.gap = "10px"; // Отступ между кнопками
 
-    var mapBtn = document.createElement('button');
-    mapBtn.innerText = "Настройки карты";
-    mapBtn.onclick = function() {
-      showSettingsModal();
-    };
-    toolbar.appendChild(mapBtn);
+		var mapBtn = document.createElement('button');
+		mapBtn.innerText = "Настройки карты";
+		mapBtn.style.padding = "5px 10px"; // Улучшаем внешний вид кнопки
+		mapBtn.onclick = function() {
+			showSettingsModal();
+		};
+		toolbar.appendChild(mapBtn);
 
-    // Кнопка "Настройки миссии" добавляется здесь через missionSettings.js
-    document.body.appendChild(toolbar);
-  }
+		document.body.appendChild(toolbar);
+
+		// Динамически корректируем позицию после создания чата
+		const chatContainer = document.getElementById('llmChatContainer');
+		if (chatContainer) {
+			const chatWidth = chatContainer.offsetWidth;
+			toolbar.style.left = `${chatWidth + 20}px`; // 20px отступ от чата
+		}
+	}
 
   // Инициализация: создаем стили и тулбар настроек
   createSettingsStyles();

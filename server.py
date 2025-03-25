@@ -51,7 +51,7 @@ def send_update_request():
             time.sleep(update_interval)
         except Exception as e:
             logger.error(f"Ошибка отправки команды update_data: {e}")
-            time.sleep(1)  # Меньшая задержка при ошибке, чтобы не спамить
+            time.sleep(1)
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
@@ -79,13 +79,30 @@ def arma_data_stream():
 @app.route("/reports_stream")
 def reports_stream():
     def event_stream():
+        # Создаём новый цикл событий для этого потока, если он ещё не существует
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
         while True:
             if not arma_connector.reports_queue.empty():
                 report = arma_connector.reports_queue.get()
                 logger.debug(f"SSE: Sending report - {report}")
+                # Проверяем start_mission и отправляем системный промпт
+                if report.get("command") == "start_mission" and not system_prompt_sent:
+                    # Выполняем асинхронную функцию в этом цикле событий
+                    loop.run_until_complete(send_system_prompt())
                 yield f"data: {json.dumps(report)}\n\n"
             time.sleep(0.1)
+    
     return Response(event_stream(), mimetype="text/event-stream")
+
+async def send_system_prompt():
+    global system_prompt_sent
+    if llm_client and "arma_session" in llm_client.chat_sessions and not system_prompt_sent:
+        logger.info("Отправка системного промпта в LLM...")
+        await llm_client.send_system_prompt("arma_session")
+        system_prompt_sent = True
+        logger.info("Системный промпт успешно отправлен")
 
 @app.route("/send_callback", methods=["POST"])
 def send_callback_endpoint():
@@ -97,7 +114,7 @@ def send_callback_endpoint():
         if "t" in data and data["t"] in ["enemy_detected", "vehicle_detected"]:
             reports_queue.put(data)
             logger.info(f"Получен доклад от LLMextension: {data}")
-        elif data.get("command") != "update_data":  # Игнорируем update_data через этот эндпоинт
+        elif data.get("command") != "update_data":
             arma_connector.send_callback_to_arma(data)
             logger.info(f"Callback отправлен в Arma: {data}")
         return jsonify({"status": "success"}), 200
@@ -330,9 +347,6 @@ async def llm_command():
     try:
         response = await llm_client.send_message("arma_session", json_input, png_path)
         if response:
-            if "commands" in response:
-                for cmd in response["commands"]:
-                    arma_connector.send_callback_to_arma(cmd)
             return jsonify({"status": "success", "response": response}), 200
         else:
             return jsonify({"status": "error", "message": "Пустой ответ от LLM"}), 500
@@ -341,6 +355,7 @@ async def llm_command():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
+    logger.info("Запуск сервера...")
     llm_client = LLMClient(config_file="config.json", system_prompt_file="system_prompt.txt")
     session_id = "arma_session"
     if not llm_client.create_session(session_id):
@@ -351,6 +366,6 @@ if __name__ == "__main__":
     threading.Thread(target=arma_connector.run_server, daemon=True).start()
     update_running = True
     update_thread = threading.Thread(target=send_update_request, daemon=True)
-    update_thread.start()  # Запускаем только один поток
+    update_thread.start()
     logger.info("Сервер запущен на http://localhost:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)

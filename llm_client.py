@@ -98,8 +98,8 @@ class LLMClient:
                 logger.info(f"LLM отправка (попытка {attempt}): {content}")
                 response = await asyncio.to_thread(
                     chat_session.send_message,
-                    content,
-                    generation_config={"response_mime_type": "application/json"}
+                    content
+                    # Убираем generation_config, чтобы получить текст
                 )
                 logger.info(f"LLM ответ: {response.text}")
                 return response.text
@@ -164,10 +164,8 @@ class LLMClient:
                 logger.info(f"Добавлено изображение из {png_path}")
 
             answer = await self._retry_send_message(chat_session, content)
-            return json.loads(answer) if answer else None
-        except json.JSONDecodeError as e:
-            logger.error(f"Ошибка парсинга JSON-ответа: {e}")
-            return None
+            # Возвращаем текст как есть, без парсинга в JSON
+            return {"response": answer} if answer else None
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения: {e}")
             return None
