@@ -10,7 +10,6 @@ import time
 import json
 from queue import Queue
 from llm_client import LLMClient
-from llm_data_processor import LLMDataProcessor  # Импорт нового модуля
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
@@ -33,31 +32,11 @@ os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
 update_interval = 10  # По умолчанию 10 секунд
 update_thread = None
 update_running = False
-update_lock = threading.Lock()
+update_lock = threading.Lock()  # Блокировка для управления потоком
 
 reports_queue = Queue()
-llm_client = None
-system_prompt_sent = False
-llm_data_processor = None
-
-# Хранилище настроек миссии
-mission_settings = {
-    "updateInterval": 60,
-    "llmSide": "OPFOR",
-    "preset": None,
-    "displaySide": None,
-    "llmModel": None,
-    "llmUpdateInterval": 30  # Новый параметр для интервала отправки данных в LLM
-}
-
-# Инициализация LLM клиента и процессора данных
-def initialize_llm():
-    global llm_client, llm_data_processor
-    llm_client = LLMClient("config.json")
-    llm_client.start_session("arma_session")
-    llm_data_processor = LLMDataProcessor("config.json", default_interval=mission_settings["llmUpdateInterval"])
-    llm_data_processor.start(app)
-    logger.info("LLM сессия и процессор данных успешно созданы")
+llm_client = None  # Глобальный объект LLMClient
+system_prompt_sent = False  # Флаг отправки системного промпта
 
 def send_update_request():
     global update_running
@@ -100,16 +79,21 @@ def arma_data_stream():
 @app.route("/reports_stream")
 def reports_stream():
     def event_stream():
+        # Создаём новый цикл событий для этого потока, если он ещё не существует
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
         while True:
             if not arma_connector.reports_queue.empty():
                 report = arma_connector.reports_queue.get()
                 logger.debug(f"SSE: Sending report - {report}")
+                # Проверяем start_mission и отправляем системный промпт
                 if report.get("command") == "start_mission" and not system_prompt_sent:
+                    # Выполняем асинхронную функцию в этом цикле событий
                     loop.run_until_complete(send_system_prompt())
                 yield f"data: {json.dumps(report)}\n\n"
             time.sleep(0.1)
+    
     return Response(event_stream(), mimetype="text/event-stream")
 
 async def send_system_prompt():
@@ -145,10 +129,13 @@ def set_update_interval():
     if not data or "interval" not in data:
         logger.error("Неверные параметры в /set_update_interval")
         return jsonify({"status": "error", "message": "Missing interval"}), 400
-    new_interval = min(max(int(data["interval"]), 1), 60)
+    new_interval = int(data["interval"])
+    if new_interval < 1:
+        logger.error("Интервал должен быть больше 0")
+        return jsonify({"status": "error", "message": "Interval must be positive"}), 400
+    
     with update_lock:
         update_interval = new_interval
-        mission_settings["updateInterval"] = new_interval  # Синхронизация с mission_settings
         if update_running:
             update_running = False
             if update_thread:
@@ -156,22 +143,190 @@ def set_update_interval():
         update_running = True
         update_thread = threading.Thread(target=send_update_request, daemon=True)
         update_thread.start()
-    logger.info(f"Установлен интервал обновления игры: {update_interval} секунд")
+    logger.info(f"Установлен интервал обновления: {update_interval} секунд")
     return jsonify({"status": "success", "interval": update_interval}), 200
 
-@app.route("/set_llm_update_interval", methods=["POST"])
-def set_llm_update_interval():
-    data = request.get_json()
-    if not data or "interval" not in data:
-        return jsonify({"status": "error", "message": "Отсутствует параметр interval"}), 400
-    interval = min(max(int(data["interval"]), 1), 300)
-    mission_settings["llmUpdateInterval"] = interval
-    logger.info(f"Установлен интервал обновления LLM: {interval} секунд")
-    return jsonify({"status": "success", "interval": interval}), 200
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
 
-@app.route("/get_mission_settings", methods=["GET"])
-def get_mission_settings():
-    return jsonify({"status": "success", "settings": mission_settings})
+@app.route("/")
+def serve_index():
+    return app.send_static_file("index.html")
+
+@app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
+def get_tile(z, x, y):
+    if x < 0 or y < 0:
+        return send_from_directory(app.static_folder, TRANSPARENT_TILE)
+    tile_dir = os.path.join(TILES_FOLDER, str(z), str(x))
+    tile_filename = f"{y}.png"
+    tile_path = os.path.join(tile_dir, tile_filename)
+    if os.path.exists(tile_path):
+        response = send_from_directory(tile_dir, tile_filename)
+        response.cache_control.max_age = CACHE_TIMEOUT
+        response.cache_control.public = True
+        return response
+    return send_from_directory(app.static_folder, TRANSPARENT_TILE)
+
+@app.route("/save_snapshot", methods=["POST"])
+def save_snapshot():
+    data = request.get_json()
+    if not data or "image" not in data or "filename" not in data:
+        abort(400, "Неверные параметры")
+    image_data = data["image"].split(',')[1]
+    filename = data["filename"]
+    file_path = os.path.join(SNAPSHOTS_FOLDER, filename)
+    try:
+        with open(file_path, "wb") as f:
+            f.write(base64.b64decode(image_data))
+        return jsonify({"status": "success", "path": file_path}), 200
+    except Exception as e:
+        logger.error(f"Ошибка сохранения снимка: {e}")
+        abort(500)
+
+@app.route("/names")
+def get_names():
+    db_path = os.path.join(DB_DIR, "name.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, type, x, y FROM names")
+        rows = cur.fetchall()
+        names_list = [dict(row) for row in rows]
+        conn.close()
+        return jsonify(names_list)
+    except Exception as e:
+        logger.error(f"Ошибка чтения базы данных: {e}")
+        abort(500)
+
+@app.route("/update_label", methods=["POST"])
+def update_label():
+    data = request.get_json()
+    if not data or "id" not in data or "x" not in data or "y" not in data:
+        abort(400, "Неверные параметры")
+    db_path = os.path.join(DB_DIR, "name.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("UPDATE names SET x = ?, y = ? WHERE id = ?", (data["x"], data["y"], data["id"]))
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Ошибка обновления надписи: {e}")
+        abort(500)
+
+@app.route("/add_label", methods=["POST"])
+def add_label():
+    data = request.get_json()
+    if not data or "name" not in data or "type" not in data or "x" not in data or "y" not in data:
+        abort(400, "Неверные параметры")
+    db_path = os.path.join(DB_DIR, "name.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO names (name, type, x, y) VALUES (?, ?, ?, ?)", 
+                    (data["name"], data["type"], data["x"], data["y"]))
+        conn.commit()
+        new_id = cur.lastrowid
+        conn.close()
+        return jsonify({"status": "success", "id": new_id}), 200
+    except Exception as e:
+        logger.error(f"Ошибка добавления надписи: {e}")
+        abort(500)
+
+@app.route("/send_to_arma", methods=["POST"])
+def send_to_arma_endpoint():
+    data = request.get_json()
+    if not data:
+        abort(400, "Неверные параметры")
+    try:
+        arma_connector.send_to_arma(data)
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Ошибка отправки в ARMA: {e}")
+        abort(500)
+
+@app.route("/get_buildings", methods=["POST"])
+def get_buildings():
+    area = request.get_json()
+    min_x, max_x, min_y, max_y = area['minX'], area['maxX'], area['minY'], area['maxY']
+    db_path = os.path.join(DB_DIR, "buildings.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, x, y, z, interior FROM buildings WHERE x >= ? AND x <= ? AND y >= ? AND y <= ?",
+                    (min_x, max_x, min_y, max_y))
+        buildings = [{'id': row['id'], 'name': row['name'], 'x': row['x'], 'y': row['y'], 'z': row['z'], 'interior': row['interior']} for row in cur.fetchall()]
+        conn.close()
+        logger.info(f"Получено зданий: {len(buildings)} для области {min_x},{min_y} - {max_x},{max_y}")
+        return jsonify(buildings)
+    except Exception as e:
+        logger.error(f"Ошибка получения зданий: {e}")
+        abort(500)
+
+@app.route("/get_names_in_area", methods=["POST"])
+def get_names_in_area():
+    area = request.get_json()
+    min_x, max_x, min_y, max_y = area['minX'], area['maxX'], area['minY'], area['maxY']
+    db_path = os.path.join(DB_DIR, "name.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, type, x, y FROM names WHERE x >= ? AND x <= ? AND y >= ? AND y <= ?",
+                    (min_x, max_x, min_y, max_y))
+        names = [{'id': row['id'], 'name': row['name'], 'type': row['type'], 'x': row['x'], 'y': row['y']} for row in cur.fetchall()]
+        conn.close()
+        logger.info(f"Получено названий: {len(names)} для области {min_x},{min_y} - {max_x},{max_y}")
+        return jsonify(names)
+    except Exception as e:
+        logger.error(f"Ошибка получения названий: {e}")
+        abort(500)
+
+@app.route("/save_json", methods=["POST"])
+def save_json():
+    data = request.get_json()
+    if not data or "filename" not in data or "data" not in data:
+        logger.error("Неверные параметры в /save_json")
+        return jsonify({"status": "error", "message": "Invalid parameters"}), 400
+    filename = data["filename"]
+    content = data["data"]
+    file_path = os.path.join(BASE_DIR, filename)
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(content, f, ensure_ascii=False)
+        logger.info(f"JSON сохранен: {file_path}")
+        return jsonify({"status": "success", "filename": filename}), 200
+    except Exception as e:
+        logger.error(f"Ошибка сохранения JSON: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/llm_models", methods=["GET"])
+def get_llm_models():
+    global llm_client
+    if not llm_client:
+        return jsonify({"status": "error", "message": "LLMClient не инициализирован"}), 500
+    models = llm_client.get_available_models()
+    return jsonify({"status": "success", "models": models}), 200
+
+@app.route("/set_llm_model", methods=["POST"])
+def set_llm_model():
+    global llm_client
+    if not llm_client:
+        return jsonify({"status": "error", "message": "LLMClient не инициализирован"}), 500
+    data = request.get_json()
+    model_name = data.get("model")
+    if not model_name:
+        return jsonify({"status": "error", "message": "Отсутствует model"}), 400
+    if llm_client.set_model(model_name):
+        return jsonify({"status": "success", "model": model_name}), 200
+    return jsonify({"status": "error", "message": "Ошибка смены модели"}), 500
 
 @app.route("/llm_command", methods=["POST"])
 async def llm_command():
@@ -187,9 +342,7 @@ async def llm_command():
         return jsonify({"status": "error", "message": "Отсутствует json_input"}), 400
     
     json_input = data["json_input"]
-    png_path = data.get("png_path")
-    
-    json_input["side"] = mission_settings["llmSide"]
+    png_path = data.get("png_path")  # Опционально
     
     try:
         response = await llm_client.send_message("arma_session", json_input, png_path)
@@ -201,18 +354,15 @@ async def llm_command():
         logger.error(f"Ошибка в llm_command: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return response
-
-# Оставшиеся маршруты остаются без изменений...
-
 if __name__ == "__main__":
     logger.info("Запуск сервера...")
-    initialize_llm()  # Инициализация LLM и процессора данных
+    llm_client = LLMClient(config_file="config.json", system_prompt_file="system_prompt.txt")
+    session_id = "arma_session"
+    if not llm_client.create_session(session_id):
+        logger.error("Не удалось создать сессию LLM. Сервер продолжает работу без LLM.")
+    else:
+        logger.info("LLM сессия успешно создана")
+    
     threading.Thread(target=arma_connector.run_server, daemon=True).start()
     update_running = True
     update_thread = threading.Thread(target=send_update_request, daemon=True)
