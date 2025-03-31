@@ -1,16 +1,15 @@
 (function() {
-  // Переменные для хранения данных миссии
   window.missionSettings = window.missionSettings || {
-    updateInterval: 60, // По умолчанию 60 секунд
-    llmSide: null,      // Сторона LLM
-    preset: null,       // Предустановка (сторона или группа)
-    displaySide: null,  // Отображаемая сторона
-    llmModel: null      // Выбранная модель LLM
+    updateInterval: 60,
+    llmSide: null,
+    preset: null,
+    displaySide: null,
+    llmModel: null,
+    llmUpdateInterval: 30  // Новый параметр по умолчанию
   };
-  let sidesData = {};   // Данные о сторонах и группах из /arma_data
-  let availableModels = []; // Список доступных моделей LLM
+  let sidesData = {};
+  let availableModels = [];
 
-  // Создание тулбара для открытия настроек миссии
   function createMissionSettingsToolbar() {
     const toolbar = document.getElementById("settingsToolbar");
     const btn = document.createElement('button');
@@ -20,7 +19,6 @@
     toolbar.appendChild(btn);
   }
 
-  // Загрузка настроек из localStorage и данных о моделях LLM
   function loadSettings() {
     const stored = localStorage.getItem('missionSettings');
     if (stored) {
@@ -30,7 +28,6 @@
         console.error("Ошибка парсинга настроек миссии, используются значения по умолчанию", e);
       }
     }
-    // Загрузка данных о сторонах
     fetch('/arma_data')
       .then(response => response.json())
       .then(data => {
@@ -40,26 +37,21 @@
         }
       })
       .catch(err => console.error("Ошибка загрузки данных о сторонах:", err));
-    // Загрузка списка моделей LLM
     fetch('/llm_models')
       .then(response => response.json())
       .then(data => {
         if (data.status === "success") {
           availableModels = data.models;
           console.log("Доступные модели LLM:", availableModels);
-        } else {
-          console.error("Ошибка получения моделей LLM:", data);
         }
       })
       .catch(err => console.error("Ошибка запроса списка моделей LLM:", err));
   }
 
-  // Сохранение настроек в localStorage
   function saveSettings() {
     localStorage.setItem('missionSettings', JSON.stringify(window.missionSettings));
   }
 
-  // Отображение модального окна настроек миссии
   function showMissionSettingsModal() {
     const overlay = document.createElement('div');
     overlay.id = "missionSettingsOverlay";
@@ -89,9 +81,9 @@
     title.innerText = "Настройки миссии";
     modal.appendChild(title);
 
-    // Интервал обновления
+    // Интервал обновления игры
     const intervalLabel = document.createElement('label');
-    intervalLabel.innerText = "Интервал обновления (сек):";
+    intervalLabel.innerText = "Интервал обновления игры (сек):";
     intervalLabel.style.width = "180px";
     intervalLabel.style.display = "inline-block";
     intervalLabel.style.marginBottom = "5px";
@@ -104,9 +96,27 @@
     intervalInput.value = window.missionSettings.updateInterval;
     intervalInput.style.width = "80px";
     intervalInput.style.marginBottom = "8px";
-    intervalInput.style.verticalAlign = "middle";
     modal.appendChild(intervalLabel);
     modal.appendChild(intervalInput);
+    modal.appendChild(document.createElement('br'));
+
+    // Интервал обновления LLM
+    const llmIntervalLabel = document.createElement('label');
+    llmIntervalLabel.innerText = "Интервал обновления LLM (сек):";
+    llmIntervalLabel.style.width = "180px";
+    llmIntervalLabel.style.display = "inline-block";
+    llmIntervalLabel.style.marginBottom = "5px";
+    llmIntervalLabel.style.verticalAlign = "middle";
+    const llmIntervalInput = document.createElement('input');
+    llmIntervalInput.type = "number";
+    llmIntervalInput.id = "llmUpdateInterval";
+    llmIntervalInput.min = "1";
+    llmIntervalInput.max = "300";
+    llmIntervalInput.value = window.missionSettings.llmUpdateInterval;
+    llmIntervalInput.style.width = "80px";
+    llmIntervalInput.style.marginBottom = "8px";
+    modal.appendChild(llmIntervalLabel);
+    modal.appendChild(llmIntervalInput);
     modal.appendChild(document.createElement('br'));
 
     // Сторона LLM
@@ -115,12 +125,10 @@
     sideLabel.style.width = "180px";
     sideLabel.style.display = "inline-block";
     sideLabel.style.marginBottom = "5px";
-    sideLabel.style.verticalAlign = "middle";
     const sideSelect = document.createElement('select');
     sideSelect.id = "llmSide";
     sideSelect.style.width = "150px";
     sideSelect.style.marginBottom = "8px";
-    sideSelect.style.verticalAlign = "middle";
     const defaultSideOption = document.createElement('option');
     defaultSideOption.value = "";
     defaultSideOption.text = "Выберите сторону";
@@ -142,12 +150,10 @@
     displaySideLabel.style.width = "180px";
     displaySideLabel.style.display = "inline-block";
     displaySideLabel.style.marginBottom = "5px";
-    displaySideLabel.style.verticalAlign = "middle";
     const displaySideSelect = document.createElement('select');
     displaySideSelect.id = "displaySide";
     displaySideSelect.style.width = "150px";
     displaySideSelect.style.marginBottom = "8px";
-    displaySideSelect.style.verticalAlign = "middle";
     const defaultDisplaySideOption = document.createElement('option');
     defaultDisplaySideOption.value = "";
     defaultDisplaySideOption.text = "Все стороны";
@@ -163,18 +169,16 @@
     modal.appendChild(displaySideSelect);
     modal.appendChild(document.createElement('br'));
 
-    // Предустановки (сторона или группа)
+    // Предустановки
     const presetLabel = document.createElement('label');
     presetLabel.innerText = "Предустановка:";
     presetLabel.style.width = "180px";
     presetLabel.style.display = "inline-block";
     presetLabel.style.marginBottom = "5px";
-    presetLabel.style.verticalAlign = "middle";
     const presetSelect = document.createElement('select');
     presetSelect.id = "preset";
     presetSelect.style.width = "150px";
     presetSelect.style.marginBottom = "8px";
-    presetSelect.style.verticalAlign = "middle";
     const presetDefault = document.createElement('option');
     presetDefault.value = "";
     presetDefault.text = "Выберите цель";
@@ -197,18 +201,16 @@
     modal.appendChild(presetSelect);
     modal.appendChild(document.createElement('br'));
 
-    // Выбор модели LLM
+    // Модель LLM
     const modelLabel = document.createElement('label');
     modelLabel.innerText = "Модель LLM:";
     modelLabel.style.width = "180px";
     modelLabel.style.display = "inline-block";
     modelLabel.style.marginBottom = "5px";
-    modelLabel.style.verticalAlign = "middle";
     const modelSelect = document.createElement('select');
     modelSelect.id = "llmModel";
     modelSelect.style.width = "150px";
     modelSelect.style.marginBottom = "8px";
-    modelSelect.style.verticalAlign = "middle";
     const defaultModelOption = document.createElement('option');
     defaultModelOption.value = "";
     defaultModelOption.text = "Выберите модель";
@@ -241,8 +243,6 @@
       label.style.width = "180px";
       label.style.display = "inline-block";
       label.style.marginBottom = "5px";
-      label.style.verticalAlign = "middle";
-      
       let inputElement;
       if (cmd.type === "number") {
         inputElement = document.createElement('input');
@@ -253,13 +253,11 @@
         inputElement.value = "0";
         inputElement.style.width = "100px";
         inputElement.style.marginBottom = "8px";
-        inputElement.style.verticalAlign = "middle";
       } else {
         inputElement = document.createElement('select');
         inputElement.id = `${cmd.id}Select`;
         inputElement.style.width = "100px";
         inputElement.style.marginBottom = "8px";
-        inputElement.style.verticalAlign = "middle";
         cmd.options.forEach(opt => {
           const option = document.createElement('option');
           option.value = opt;
@@ -267,19 +265,16 @@
           inputElement.appendChild(option);
         });
       }
-
       const applyBtn = document.createElement('button');
       applyBtn.innerText = "Применить";
       applyBtn.style.marginLeft = "10px";
       applyBtn.onclick = () => sendCommand(cmd.id, cmd.arg, inputElement.value);
-
       modal.appendChild(label);
       modal.appendChild(inputElement);
       modal.appendChild(applyBtn);
       modal.appendChild(document.createElement('br'));
     });
 
-    // Кнопка закрытия
     const btnContainer = document.createElement('div');
     btnContainer.classList.add('buttons-container');
     const btnClose = document.createElement('button');
@@ -294,10 +289,13 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Обработчики событий
     intervalInput.addEventListener('change', () => {
       window.missionSettings.updateInterval = Math.min(Math.max(parseInt(intervalInput.value) || 60, 1), 60);
       intervalInput.value = window.missionSettings.updateInterval;
+    });
+    llmIntervalInput.addEventListener('change', () => {
+      window.missionSettings.llmUpdateInterval = Math.min(Math.max(parseInt(llmIntervalInput.value) || 30, 1), 300);
+      llmIntervalInput.value = window.missionSettings.llmUpdateInterval;
     });
     sideSelect.addEventListener('change', () => {
       window.missionSettings.llmSide = sideSelect.value;
@@ -335,7 +333,6 @@
     });
   }
 
-  // Отправка команды в игру
   function sendCommand(commandId, argName, argValue) {
     const preset = window.missionSettings.preset;
     if (!preset) {
@@ -347,9 +344,7 @@
       command: commandId,
       side: side
     };
-    if (group) {
-      message.group = group;
-    }
+    if (group) message.group = group;
     message[argName] = (argName === "direction") ? parseInt(argValue) : argValue;
     fetch('/send_callback', {
       method: 'POST',
@@ -367,28 +362,45 @@
     .catch(err => console.error("Ошибка отправки команды:", err));
   }
 
-  // Сохранение настроек и обновление интервала
   function saveAndClose() {
-    const interval = Math.min(Math.max(parseInt(document.getElementById('updateInterval').value) || 60, 1), 60);
+    const updateInterval = Math.min(Math.max(parseInt(document.getElementById('updateInterval').value) || 60, 1), 60);
+    const llmUpdateInterval = Math.min(Math.max(parseInt(document.getElementById('llmUpdateInterval').value) || 30, 1), 300);
+
     fetch('/set_update_interval', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interval: interval })
+      body: JSON.stringify({ interval: updateInterval })
     })
     .then(response => response.json())
     .then(result => {
       if (result.status === "success") {
-        console.log(`Интервал обновления установлен: ${result.interval} сек`);
+        console.log(`Интервал обновления игры установлен: ${result.interval} сек`);
         window.missionSettings.updateInterval = result.interval;
-        saveSettings();
       } else {
-        console.error("Ошибка установки интервала:", result);
+        console.error("Ошибка установки интервала игры:", result);
       }
     })
-    .catch(err => console.error("Ошибка установки интервала:", err));
+    .catch(err => console.error("Ошибка установки интервала игры:", err));
+
+    fetch('/set_llm_update_interval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval: llmUpdateInterval })
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.status === "success") {
+        console.log(`Интервал обновления LLM установлен: ${result.interval} сек`);
+        window.missionSettings.llmUpdateInterval = result.interval;
+      } else {
+        console.error("Ошибка установки интервала LLM:", result);
+      }
+    })
+    .catch(err => console.error("Ошибка установки интервала LLM:", err));
+
+    saveSettings();
   }
 
-  // Инициализация
   loadSettings();
   createMissionSettingsToolbar();
 })();
