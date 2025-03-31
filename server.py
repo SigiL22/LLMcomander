@@ -269,7 +269,7 @@ def reports_stream():
 
                     yield f"data: {json.dumps(report)}\n\n"
                     # Сообщаем async очереди, что элемент обработан (тоже через мост)
-                    run_async_from_sync(arma_connector.reports_queue.task_done())
+                    run_async_from_sync(arma_connector.mark_report_done()) # <--- ИЗМЕНЕНИЕ
                 else:
                     # Если отчета нет, ждем немного
                     time.sleep(0.1)

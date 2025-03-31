@@ -149,7 +149,16 @@ async def _send_message_persistent(writer: StreamWriter | None, host: str, port:
         except Exception: pass
         return None
 
-# --- УДАЛЕНА: send_to_arma_async ---
+async def mark_report_done():
+    """Асинхронная обертка для reports_queue.task_done()."""
+    try:
+        reports_queue.task_done()
+    except ValueError:
+        # task_done() может вызвать ValueError, если вызван для пустой очереди
+        # или больше раз, чем было put. Логгируем это.
+        logger.warning("Попытка вызвать task_done() для очереди репортов, когда это не ожидалось.")
+    except Exception as e:
+        logger.exception("Неожиданная ошибка при вызове task_done() для очереди репортов.")
 
 # send_callback_to_arma_async остается без изменений (отправляет на 12347)
 async def send_callback_to_arma_async(message: dict | str, host: str = '127.0.0.1'):
