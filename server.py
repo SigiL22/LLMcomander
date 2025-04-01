@@ -18,21 +18,43 @@ import arma_connector_async as arma_connector # Переименовали фа�
 from llm_client import LLMClient
 
 # --- НАСТРОЙКА ЛОГИРОВАНИЯ (как в предыдущем ответе) ---
+# Более сжатый форматтер
+log_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%H:%M:%S') # Убрали %(name)s, добавили формат времени
+
+# Настройка корневого логгера (влияет на все, включая waitress)
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s', datefmt='%H:%M:%S')
+
+# Настройка логгера нашего сервера
 logger = logging.getLogger("Server")
-logger.setLevel(logging.INFO)
-logger.propagate = False
+logger.setLevel(logging.INFO) # Основные события сервера - INFO
+logger.propagate = False # Не передавать сообщения корневому логгеру
+
+# Настройка логгера коннектора Arma
+arma_logger = logging.getLogger("ArmaConnectorAsync")
+arma_logger.setLevel(logging.INFO) # Основные события коннектора - INFO (или DEBUG, если нужно)
+arma_logger.propagate = False
+
+# Убираем INFO и DEBUG логи от waitress, оставляем только WARNING и выше для корневого
+logging.getLogger("waitress").setLevel(logging.WARNING)
+
+# Добавляем обработчики только если их нет
 if not logger.handlers:
-    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_formatter)
     logger.addHandler(console_handler)
+    # Добавляем тот же обработчик к логгеру Arma, чтобы видеть его сообщения
+    arma_logger.addHandler(console_handler)
+
     log_file = "server.log"
     file_handler = logging.handlers.RotatingFileHandler(
         log_file, maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
     )
     file_handler.setFormatter(log_formatter)
     logger.addHandler(file_handler)
-logger.info("=" * 20 + " Модуль server.py загружен, логгер настроен " + "=" * 20)
+    # Добавляем тот же файловый обработчик к логгеру Arma
+    arma_logger.addHandler(file_handler)
+
+logger.info("=" * 10 + " Server Start " + "=" * 10)
 # --- КОНЕЦ НАСТРОЙКИ ЛОГИРОВАНИЯ ---
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -106,15 +128,23 @@ def run_async_from_sync(coro: Coroutine) -> any: # <-- Исправлена ан
 
 # --- ИНИЦИАЛИЗАЦИЯ (ВЫНЕСЕНА) ---
 logger.info("Инициализация LLMClient...")
+llm_client = None # Инициализируем как None
 try:
-    llm_client = LLMClient(config_file="config.json", system_prompt_file="system_prompt.txt")
-    session_id = "arma_session"
-    if not llm_client.create_session(session_id):
-        logger.error("Не удалось создать сессию LLM.")
+    llm_client_instance = LLMClient(config_file="config.json", system_prompt_file="system_prompt.txt")
+    if llm_client_instance.is_operational:
+         llm_client = llm_client_instance # Присваиваем глобальной переменной только если клиент готов
+         session_id = "arma_session"
+         if not llm_client.create_session(session_id):
+             logger.error("Не удалось создать сессию LLM, хотя клиент был операционен.")
+             llm_client = None # Сбрасываем, если сессию создать не удалось
+         else:
+             logger.info("LLM сессия 'arma_session' успешно создана")
     else:
-        logger.info("LLM сессия 'arma_session' успешно создана")
+         logger.error("LLMClient не инициализирован из-за ошибки API или геолокации. Работа без LLM.")
+         # llm_client остается None
 except Exception as e:
-    logger.exception(f"Критическая ошибка при инициализации LLMClient: {e}")
+    logger.exception(f"Критическая ошибка при создании объекта LLMClient: {e}")
+    llm_client = None # Убедимся, что он None при любой ошибке
 
 # Запускаем asyncio loop для arma_connector в отдельном потоке
 logger.info("Запуск фоновых потоков...")

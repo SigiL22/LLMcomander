@@ -533,3 +533,33 @@
 
 Давай обсудим! Что тебе кажется самым сложным или самым интересным в командовании в Арме?
 2025-03-31 17:31:37,486 - INFO - Системный промпт отправлен для сессии arma_session
+2025-04-01 09:19:35,756 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-04-01 09:19:35,757 - WARNING - Модель gemini-2.5-pro-exp-03-25 не найдена в списке доступных: []
+2025-04-01 09:19:35,757 - INFO - Инициализирована модель gemini-2.5-pro-exp-03-25
+2025-04-01 09:19:35,758 - INFO - Создание chat_session для arma_session
+2025-04-01 09:19:35,758 - INFO - Сессия arma_session создана
+2025-04-01 09:19:44,451 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-04-01 09:19:44,452 - WARNING - Модель gemini-2.5-pro-exp-03-25 не найдена в списке доступных: []
+2025-04-01 09:19:44,452 - INFO - Инициализирована модель gemini-2.5-pro-exp-03-25
+2025-04-01 09:19:44,452 - INFO - Создание chat_session для arma_session
+2025-04-01 09:19:44,452 - INFO - Сессия arma_session создана
+2025-04-01 09:19:52,230 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-04-01 09:19:52,231 - WARNING - Модель gemini-2.5-pro-exp-03-25 не найдена в списке доступных: []
+2025-04-01 09:19:52,231 - INFO - Инициализирована модель gemini-2.5-pro-exp-03-25
+2025-04-01 09:19:52,231 - INFO - Создание chat_session для arma_session
+2025-04-01 09:19:52,232 - INFO - Сессия arma_session создана
+2025-04-01 09:24:18,152 - ERROR - Ошибка получения списка моделей: 400 User location is not supported for the API use.
+2025-04-01 09:24:18,153 - WARNING - Модель gemini-2.5-pro-exp-03-25 не найдена в списке доступных: []
+2025-04-01 09:24:18,153 - INFO - Инициализирована модель gemini-2.5-pro-exp-03-25
+2025-04-01 09:24:18,153 - INFO - Создание chat_session для arma_session
+2025-04-01 09:24:18,153 - INFO - Сессия arma_session создана
+10:13:23 [INFO] llm_client: Инициализация LLMClient...
+10:13:23 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+10:13:23 [INFO] llm_client: Конфигурация Google API...
+10:13:23 [INFO] llm_client: Проверка доступности API и моделей...
+10:13:24 [ERROR] llm_client: Ошибка получения списка моделей: 400 User location is not supported for the API use.
+10:13:24 [ERROR] llm_client: Критическая ошибка инициализации LLMClient: Не удалось получить список моделей от API. Проверьте ключ API и доступность API для вашего региона.
+Traceback (most recent call last):
+  File "C:\LLMcomander\llm_client.py", line 88, in __init__
+    raise RuntimeError("Не удалось получить список моделей от API. Проверьте ключ API и доступность API для вашего региона.")
+RuntimeError: Не удалось получить список моделей от API. Проверьте ключ API и доступность API для вашего региона.
