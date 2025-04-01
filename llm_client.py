@@ -10,14 +10,17 @@ from typing import Dict, Optional, List
 # Попытка импорта библиотеки Google
 try:
     import google.generativeai as genai
-    from google.generativeai.types import GenerationConfig # Импортируем отдельно
+    from google.generativeai.types import GenerationConfig, Part # Импортируем Part явно
 except ImportError:
     genai = None
-    GenerationConfig = None # Определяем как None, если импорт не удался
+    GenerationConfig = None
+    Part = None # Определяем как None, если импорт не удался
 
 # --- Настройка логгера ---
 logger = logging.getLogger("llm_client")
-logger.setLevel(logging.INFO)
+# Устанавливаем DEBUG для подробного логгирования запросов/ответов
+# Если хотите меньше логов, измените на logging.INFO
+logger.setLevel(logging.DEBUG)
 logger.propagate = False # Предотвращаем дублирование
 
 if not logger.handlers:
@@ -28,15 +31,24 @@ if not logger.handlers:
     logger.addHandler(console_handler)
 
     # Убедитесь, что директория для логов существует или создайте ее
-    log_dir = os.path.dirname("llm_client.log")
+    log_file = "llm_client.log"
+    log_dir = os.path.dirname(log_file)
     if log_dir and not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+        try:
+            os.makedirs(log_dir)
+        except OSError as e:
+            # Обработка возможной ошибки race condition, если папка создана другим процессом
+            if not os.path.isdir(log_dir):
+                print(f"Error creating log directory {log_dir}: {e}") # Используем print, т.к. логгер может быть не готов
 
-    file_handler = RotatingFileHandler(
-        "llm_client.log", maxBytes=5 * 1024 * 1024, backupCount=2, encoding="utf-8"
-    )
-    file_handler.setFormatter(log_formatter)
-    logger.addHandler(file_handler)
+    try:
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=5 * 1024 * 1024, backupCount=2, encoding="utf-8"
+        )
+        file_handler.setFormatter(log_formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        print(f"Error setting up file handler for {log_file}: {e}") # Используем print, т.к. логгер может быть не готов
 # --- Конец настройки логгера ---
 
 
@@ -54,15 +66,16 @@ class LLMClient:
         logger.info("Инициализация LLMClient...")
 
         # --- 1. Проверка наличия библиотеки ---
-        if not genai:
-            logger.error("Библиотека google.generativeai не найдена. LLMClient будет нерабочим.")
+        if not genai or not GenerationConfig or not Part:
+            logger.error("Библиотека google.generativeai или ее компоненты не найдены. LLMClient будет нерабочим.")
             return # Выходим, is_operational останется False
 
         # --- 2. Загрузка конфигурации и промпта ---
         self.config = self._load_config()
-        self.gemini_api_key = self.config.get("geminy_api_key") # Опечатка в ключе? Проверьте config.json
+        # Проверяем правильность ключа (может быть 'geminy_api_key' или 'gemini_api_key')
+        self.gemini_api_key = self.config.get("gemini_api_key") or self.config.get("geminy_api_key")
         if not self.gemini_api_key:
-             logger.error(f"API ключ 'geminy_api_key' не найден или пуст в {self.config_file}.")
+             logger.error(f"API ключ 'gemini_api_key' (или 'geminy_api_key') не найден или пуст в {self.config_file}.")
              return
         self.model_name = self.config.get("model", "gemini-1.5-flash-latest") # Используем модель по умолчанию или из конфига
         if not self.model_name:
@@ -126,6 +139,10 @@ class LLMClient:
         """Сохраняет текущую конфигурацию в config.json."""
         if not self.config_file: return
         try:
+            # Убедимся, что сохраняем правильный ключ API, если он был исправлен при загрузке
+            if "geminy_api_key" in self.config and "gemini_api_key" not in self.config:
+                self.config["gemini_api_key"] = self.config.pop("geminy_api_key")
+
             with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, ensure_ascii=False, indent=4)
             logger.info(f"Конфигурация сохранена в {self.config_file}")
@@ -137,14 +154,14 @@ class LLMClient:
             with open(self.system_prompt_file, "r", encoding="utf-8") as f:
                 text = f.read().strip()
                 if not text:
-                    logger.warning(f"Файл системного промпта {self.system_prompt_file} пустой.")
+                    logger.warning(f"Файл системного промпта {self.system_prompt_file} пустой. Используется дефолтный промпт.")
                     # Можно вернуть дефолтный промпт или None
                     return "Ты командир в Arma 3. Анализируй данные миссии и отдавай команды в формате JSON."
                 logger.info(f"Системный промпт загружен из {self.system_prompt_file}.")
                 return text
         except FileNotFoundError:
-             logger.error(f"Файл системного промпта {self.system_prompt_file} не найден.")
-             return None
+             logger.error(f"Файл системного промпта {self.system_prompt_file} не найден. Используется дефолтный промпт.")
+             return "Ты командир в Arma 3. Анализируй данные миссии и отдавай команды в формате JSON."
         except Exception as e:
             logger.exception(f"Ошибка чтения системного промта: {e}")
             return None
@@ -156,14 +173,16 @@ class LLMClient:
             # Добавляем явный вызов list_models здесь, чтобы поймать ошибку геолокации
             # Фильтруем модели, поддерживающие генерацию контента
             models_list = [
-                m.name.split('/')[-1]
+                m.name # Сохраняем полное имя модели (например, 'models/gemini-1.5-flash-latest')
                 for m in genai.list_models()
                 if 'generateContent' in m.supported_generation_methods
             ]
             if not models_list:
                 logger.warning("API вернуло пустой список моделей, поддерживающих generateContent.")
             else:
-                 logger.info(f"Доступные модели (generateContent): {models_list}")
+                 # Логируем только короткие имена для читаемости
+                 short_names = [name.split('/')[-1] for name in models_list]
+                 logger.info(f"Доступные модели (generateContent): {short_names}")
             return models_list
         except Exception as e:
             # Логгируем ошибку, включая геолокацию (если она в тексте ошибки)
@@ -175,43 +194,86 @@ class LLMClient:
         if not self.model_name:
             logger.error("Имя модели не установлено для проверки доступности.")
             return
+        # Имя модели может быть коротким (gemini-1.5...) или полным (models/gemini-1.5...)
+        # Приводим все к полному формату для сравнения
+        full_model_name = self.model_name if self.model_name.startswith("models/") else f"models/{self.model_name}"
+
         if not available_models:
              logger.warning("Список доступных моделей пуст (возможно, из-за ошибки API). Проверка невозможна.")
              # Можно поднять исключение, если модель критична
-             # raise ValueError("Cannot check model availability, API returned no models.")
-        elif self.model_name not in available_models:
-            logger.warning(f"Выбранная модель '{self.model_name}' не найдена в списке доступных: {available_models}")
+             raise ValueError("Cannot check model availability, API returned no models.")
+        elif full_model_name not in available_models:
+            short_available = [name.split('/')[-1] for name in available_models]
+            logger.warning(f"Выбранная модель '{self.model_name}' (полное имя: '{full_model_name}') не найдена в списке доступных: {short_available}")
             # Можно выбрать другую модель или поднять исключение
-            # raise ValueError(f"Model '{self.model_name}' not found in available models.")
+            raise ValueError(f"Model '{self.model_name}' not found in available models.")
         else:
             logger.info(f"Выбранная модель '{self.model_name}' доступна.")
+            # Убедимся, что используем полное имя модели при инициализации
+            self.model_name = full_model_name
 
-    async def _retry_send_message(self, chat_session, content, max_retries=3) -> Optional[str]:
+
+    async def _retry_send_message(self, session_id: str, chat_session, content, max_retries=3) -> Optional[str]:
         """Пытается отправить сообщение с ретраями при определенных ошибках."""
-        # Увеличиваем базовую задержку и добавляем вариативность
+        if not self.is_operational: # Добавим проверку здесь на всякий случай
+            logger.error(f"LLMClient не готов к работе, отправка сообщения для сессии {session_id} прервана.")
+            return None
+
         delays = [2, 5, 10] # Задержки в секундах
         last_exception = None
 
         for attempt in range(max_retries):
             try:
                 delay = delays[attempt]
-                logger.info(f"LLM отправка (попытка {attempt + 1}/{max_retries})...")
+
+                # --- НАЧАЛО: Логирование запроса ---
+                log_content_parts = []
+                request_content_for_log = content # Используем локальную переменную
+                if isinstance(request_content_for_log, list):
+                    for part in request_content_for_log:
+                        if isinstance(part, str):
+                            # Обрезаем длинные строки для лога
+                            log_part = f'"{part[:500]}..."' if len(part) > 500 else f'"{part}"'
+                            log_content_parts.append(log_part)
+                        elif isinstance(part, Part) and hasattr(part, 'mime_type') and 'image' in part.mime_type:
+                            # Показываем, что это изображение (используем Part)
+                            log_content_parts.append(f"[Image Data ({part.mime_type})]")
+                        else:
+                            # Другие возможные типы данных
+                            log_content_parts.append(f"[Unknown Part Type: {type(part)}]")
+                    log_content_str = f"[{', '.join(log_content_parts)}]"
+                elif isinstance(request_content_for_log, str):
+                    # Обрезаем длинные строки для лога
+                    log_content_str = f'"{request_content_for_log[:500]}..."' if len(request_content_for_log) > 500 else f'"{request_content_for_log}"'
+                else:
+                    log_content_str = f"[Unknown Content Type: {type(request_content_for_log)}]"
+
+                logger.debug(f"LLM Request (Session: {session_id}, Attempt: {attempt + 1}/{max_retries}): --> {log_content_str}")
+                # --- КОНЕЦ: Логирование запроса ---
+
+                logger.info(f"LLM отправка (Session: {session_id}, попытка {attempt + 1}/{max_retries})...") # Добавим сессию в INFO
                 # Используем asyncio.to_thread для запуска блокирующей функции send_message
                 response = await asyncio.to_thread(
                     chat_session.send_message,
-                    content
+                    request_content_for_log # Используем локальную переменную
                 )
                 # Проверяем наличие текста в ответе
                 if response and hasattr(response, 'text'):
-                    logger.info(f"LLM ответ получен (попытка {attempt + 1}).")
-                    # logger.debug(f"LLM ответ: {response.text}") # Логгируем только если DEBUG
+                    # --- НАЧАЛО: Логирование ответа ---
+                    log_response_text = response.text
+                    # Логируем ПОЛНЫЙ ответ на уровне DEBUG
+                    logger.debug(f"LLM Response (Session: {session_id}, Attempt: {attempt + 1}): <-- {log_response_text}")
+                    # --- КОНЕЦ: Логирование ответа ---
+
+                    # Оставляем краткое сообщение INFO
+                    logger.info(f"LLM ответ получен (Session: {session_id}, попытка {attempt + 1}).")
                     return response.text
                 else:
-                    logger.warning(f"LLM вернул пустой или некорректный ответ (попытка {attempt + 1}): {response}")
-                    # Можно считать это ошибкой и перейти к следующей попытке или вернуть None
-                    last_exception = ValueError("LLM returned an empty or invalid response.")
+                    # Логируем даже если нет 'text', чтобы понять, что пришло
+                    logger.warning(f"LLM вернул ответ без 'text' (Session: {session_id}, попытка {attempt + 1}): {response}")
+                    last_exception = ValueError("LLM returned an invalid response (missing 'text' attribute).")
                     if attempt < max_retries - 1:
-                        logger.info(f"Пауза {delay} сек перед следующей попыткой...")
+                        logger.info(f"Пауза {delay} сек перед следующей попыткой (Session: {session_id})...")
                         await asyncio.sleep(delay)
                     continue # Переходим к следующей попытке
 
@@ -222,29 +284,29 @@ class LLMClient:
                 # Ошибку геолокации (400) обрабатывать ретраями бессмысленно
                 error_str = str(e).lower()
                 if "400 user location is not supported" in error_str:
-                    logger.error(f"Ошибка геолокации API Gemini: {e}. Отправка невозможна из этого региона.")
+                    logger.error(f"Ошибка геолокации API Gemini (Session: {session_id}): {e}. Отправка невозможна из этого региона.")
                     raise e # Прерываем ретраи, ошибка фатальна для этого региона
                 elif "503" in error_str or "429" in error_str or "500" in error_str:
                     if attempt < max_retries - 1:
-                        logger.warning(f"Ошибка API ({type(e).__name__}), попытка {attempt + 1}/{max_retries}. Пауза {delay} сек: {e}")
+                        logger.warning(f"Ошибка API ({type(e).__name__}), попытка {attempt + 1}/{max_retries} (Session: {session_id}). Пауза {delay} сек: {e}")
                         await asyncio.sleep(delay)
                         continue # Переходим к следующей попытке
                     else:
-                        logger.error(f"Превышено количество попыток ({max_retries}) после ошибки API: {e}")
+                        logger.error(f"Превышено количество попыток ({max_retries}) после ошибки API (Session: {session_id}): {e}")
                         raise e # Поднимаем ошибку после последней попытки
                 else:
                     # Неизвестная ошибка, прерываем ретраи
-                    logger.exception(f"Неизвестная ошибка при отправке в LLM (попытка {attempt + 1}): {e}")
+                    logger.exception(f"Неизвестная ошибка при отправке в LLM (Session: {session_id}, попытка {attempt + 1}): {e}")
                     raise e
 
         # Если все попытки не удались
-        logger.error("Не удалось отправить сообщение в LLM после всех попыток.")
+        logger.error(f"Не удалось отправить сообщение в LLM для сессии {session_id} после всех попыток.")
         if last_exception:
             raise last_exception # Поднимаем последнюю пойманную ошибку
         else:
             # Этого не должно произойти, но на всякий случай
-            raise RuntimeError("LLM: Неизвестная ошибка при отправке после всех ретраев.")
-        return None # Добавлено для ясности, хотя raise не даст сюда дойти
+            raise RuntimeError(f"LLM: Неизвестная ошибка при отправке для сессии {session_id} после всех ретраев.")
+        # return None # Добавлено для ясности, хотя raise не даст сюда дойти
 
     def create_session(self, session_id: str) -> bool:
         """Создает новую сессию чата."""
@@ -286,8 +348,8 @@ class LLMClient:
 
         try:
             logger.info(f"Отправка системного промпта для сессии {session_id}...")
-            # Отправляем промпт как первое сообщение
-            await self._retry_send_message(chat_session, self.system_prompt)
+            # Отправляем промпт как первое сообщение, передаем session_id в retry
+            await self._retry_send_message(session_id, chat_session, self.system_prompt)
             logger.info(f"Системный промпт успешно отправлен для сессии {session_id}")
             # Важно: Не добавляем системный промпт явно в history,
             # так как Gemini может обрабатывать его отдельно или в специальном формате.
@@ -318,33 +380,35 @@ class LLMClient:
             # Добавляем текстовую часть, если она есть
             if user_input:
                  content_parts.append(user_input)
-                 logger.info(f"Подготовка к отправке: текст '{user_input[:50]}...'")
+                 # Логируем только начало текста на уровне INFO
+                 logger.info(f"Подготовка к отправке в LLM (Session: {session_id}): текст '{user_input[:50]}...'")
 
             # Добавляем изображение, если путь указан и файл существует
             image_added = False
             if png_path:
                 if os.path.exists(png_path) and os.path.isfile(png_path):
                     try:
+                        logger.info(f"Чтение изображения из {png_path}...")
                         with open(png_path, "rb") as f:
                             png_data = f.read()
                         # Используем Part.from_data для добавления изображения
-                        content_parts.append(genai.types.Part.from_data(data=png_data, mime_type="image/png"))
+                        content_parts.append(Part.from_data(data=png_data, mime_type="image/png"))
                         image_added = True
-                        logger.info(f"Изображение из {png_path} добавлено к сообщению.")
+                        logger.info(f"Изображение из {png_path} добавлено к сообщению (Session: {session_id}).")
                     except Exception as img_e:
-                         logger.error(f"Ошибка чтения или добавления изображения из {png_path}: {img_e}")
+                         logger.error(f"Ошибка чтения или добавления изображения из {png_path} (Session: {session_id}): {img_e}")
                 else:
-                     logger.warning(f"Файл изображения не найден или не является файлом: {png_path}")
+                     logger.warning(f"Файл изображения не найден или не является файлом: {png_path} (Session: {session_id})")
 
             if not content_parts:
-                 logger.error("Нет контента (ни текста, ни изображения) для отправки.")
+                 logger.error(f"Нет контента (ни текста, ни валидного изображения) для отправки (Session: {session_id}).")
                  return None
 
-            # Отправляем собранный контент
-            answer_text = await self._retry_send_message(chat_session, content_parts)
+            # Отправляем собранный контент, передаем session_id в retry
+            answer_text = await self._retry_send_message(session_id, chat_session, content_parts)
 
             # Возвращаем текстовый ответ (уже проверен на None в _retry_send_message)
-            # Логирование ответа теперь происходит в _retry_send_message
+            # Логирование ответа происходит в _retry_send_message
             return answer_text
 
         except Exception as e:
@@ -357,66 +421,82 @@ class LLMClient:
         if not self.is_operational: # Проверяем изначальную готовность
             logger.error("LLMClient не был успешно инициализирован, смена модели невозможна.")
             return False
-        if not genai: # Доп. проверка на библиотеку
-             logger.error("Библиотека google.generativeai недоступна.")
+        if not genai or not GenerationConfig: # Доп. проверка на библиотеку
+             logger.error("Библиотека google.generativeai или GenerationConfig недоступна.")
              return False
-        if self.model_name == model_name:
-             logger.info(f"Модель уже установлена на {model_name}.")
+
+        # Приводим имя новой модели к полному формату
+        full_new_model_name = model_name if model_name.startswith("models/") else f"models/{model_name}"
+
+        if self.model_name == full_new_model_name:
+             logger.info(f"Модель уже установлена на {self.model_name.split('/')[-1]}.")
              return True
 
-        logger.info(f"Попытка смены модели на: {model_name}")
+        logger.info(f"Попытка смены модели на: {model_name} (полное имя: {full_new_model_name})")
         try:
             # Проверяем доступность новой модели
             available_models = self.get_available_models()
             if not available_models:
                  logger.error("Не удалось получить список моделей для проверки перед сменой.")
                  return False
-            if model_name not in available_models:
-                logger.error(f"Новая модель '{model_name}' не найдена в списке доступных: {available_models}")
+            if full_new_model_name not in available_models:
+                short_available = [name.split('/')[-1] for name in available_models]
+                logger.error(f"Новая модель '{model_name}' не найдена в списке доступных: {short_available}")
                 return False
 
             # Инициализируем новую модель
             generation_config = GenerationConfig(candidate_count=1) # Используем тот же config
-            new_model = genai.GenerativeModel(model_name, generation_config=generation_config)
-            logger.info(f"Новый объект модели {model_name} создан.")
+            new_model = genai.GenerativeModel(full_new_model_name, generation_config=generation_config)
+            logger.info(f"Новый объект модели {full_new_model_name} создан.")
 
             # Обновляем модель и имя модели
             self.model = new_model
-            self.model_name = model_name
+            self.model_name = full_new_model_name # Сохраняем полное имя
 
             # Пересоздаем существующие сессии с НОВОЙ моделью, сохраняя историю
             logger.info("Обновление существующих сессий с новой моделью...")
-            for session_id, old_session in list(self.chat_sessions.items()): # Используем list() для безопасной итерации при изменении словаря
+            active_session_ids = list(self.chat_sessions.keys()) # Копируем ключи перед итерацией
+            for session_id in active_session_ids:
+                old_session = self.chat_sessions.get(session_id)
+                if not old_session: continue # На случай, если сессия удалилась во время итерации
                 try:
                     # Копируем историю. Убедимся, что history это список нужного формата
                     history_data = []
                     if hasattr(old_session, 'history') and isinstance(old_session.history, list):
-                         history_data = old_session.history
-                         # Возможно, потребуется преобразовать элементы истории, если формат изменился
-                         # history_data = [copy.deepcopy(msg) for msg in old_session.history]
+                         # Простая проверка на базовые типы данных в истории
+                         if all(hasattr(msg, 'role') and hasattr(msg, 'parts') for msg in old_session.history):
+                              history_data = old_session.history # Прямое копирование должно работать
+                              # Если возникнут проблемы, можно использовать deepcopy:
+                              # import copy
+                              # history_data = copy.deepcopy(old_session.history)
+                         else:
+                              logger.warning(f"История сессии {session_id} имеет неожиданный формат, сессия будет создана пустой.")
+
                     else:
                          logger.warning(f"Не удалось получить историю для сессии {session_id}, сессия будет создана пустой.")
 
                     # Создаем новую сессию с той же историей, но с новой моделью
                     new_session = self.model.start_chat(history=history_data)
                     self.chat_sessions[session_id] = new_session
-                    logger.info(f"Сессия {session_id} успешно обновлена с моделью {model_name}.")
+                    logger.info(f"Сессия {session_id} успешно обновлена с моделью {self.model_name.split('/')[-1]}.")
                 except Exception as session_e:
-                    logger.error(f"Ошибка при обновлении сессии {session_id} с новой моделью: {session_e}. Сессия может быть потеряна.")
-                    # Решаем, удалять ли сессию или оставлять старую
+                    logger.error(f"Ошибка при обновлении сессии {session_id} с новой моделью: {session_e}. Сессия удалена.")
+                    # Удаляем сессию при ошибке пересоздания
                     if session_id in self.chat_sessions:
                         del self.chat_sessions[session_id]
 
-            # Сохраняем новую модель в конфиг
-            self.config["model"] = model_name
+            # Сохраняем новую модель в конфиг (короткое имя для читаемости в JSON)
+            self.config["model"] = self.model_name.split('/')[-1]
             self._save_config()
-            logger.info(f"Модель успешно изменена на {model_name} и сохранена в конфигурации.")
+            logger.info(f"Модель успешно изменена на {self.model_name.split('/')[-1]} и сохранена в конфигурации.")
             return True
 
         except Exception as e:
             logger.exception(f"Ошибка смены модели на {model_name}: {e}")
             # Не откатываем self.model, так как он мог быть испорчен
-            self.is_operational = False # Считаем клиент неработоспособным после ошибки
+            # Считаем клиент неработоспособным после ошибки смены модели, т.к. состояние неопределенное
+            self.is_operational = False
+            logger.error("LLMClient помечен как неработоспособный после ошибки смены модели.")
             return False
 
 # --- КОНЕЦ ФАЙЛА llm_client.py ---

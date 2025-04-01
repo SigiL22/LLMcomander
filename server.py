@@ -17,69 +17,49 @@ from collections.abc import Coroutine
 import arma_connector_async as arma_connector # Переименовали файл или импортируем с псевдонимом
 from llm_client import LLMClient
 
-# --- НАСТРОЙКА ЛОГИРОВАНИЯ (как в предыдущем ответе) ---
-# Более сжатый форматтер
-log_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%H:%M:%S') # Убрали %(name)s, добавили формат времени
-
-# Настройка корневого логгера (влияет на все, включая waitress)
+# --- НАСТРОЙКА ЛОГИРОВАНИЯ (обновленная) ---
+log_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%H:%M:%S')
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s', datefmt='%H:%M:%S')
-
-# Настройка логгера нашего сервера
 logger = logging.getLogger("Server")
-logger.setLevel(logging.INFO) # Основные события сервера - INFO
-logger.propagate = False # Не передавать сообщения корневому логгеру
-
-# Настройка логгера коннектора Arma
+logger.setLevel(logging.INFO)
+logger.propagate = False
 arma_logger = logging.getLogger("ArmaConnectorAsync")
-arma_logger.setLevel(logging.INFO) # Основные события коннектора - INFO (или DEBUG, если нужно)
+arma_logger.setLevel(logging.INFO) # Устанавливаем уровень для логгера коннектора
 arma_logger.propagate = False
-
-# Убираем INFO и DEBUG логи от waitress, оставляем только WARNING и выше для корневого
 logging.getLogger("waitress").setLevel(logging.WARNING)
-
-# Добавляем обработчики только если их нет
 if not logger.handlers:
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_formatter)
     logger.addHandler(console_handler)
-    # Добавляем тот же обработчик к логгеру Arma, чтобы видеть его сообщения
-    arma_logger.addHandler(console_handler)
-
+    arma_logger.addHandler(console_handler) # Добавляем тот же обработчик
     log_file = "server.log"
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_file, maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
-    )
+    file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=2, encoding='utf-8')
     file_handler.setFormatter(log_formatter)
     logger.addHandler(file_handler)
-    # Добавляем тот же файловый обработчик к логгеру Arma
-    arma_logger.addHandler(file_handler)
-
+    arma_logger.addHandler(file_handler) # Добавляем тот же обработчик
 logger.info("=" * 10 + " Server Start " + "=" * 10)
 # --- КОНЕЦ НАСТРОЙКИ ЛОГИРОВАНИЯ ---
 
+# --- Константы и создание Flask app (без изменений) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 DB_DIR = os.path.join(BASE_DIR, 'db')
-
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 logger.info("Объект Flask 'app' создан.")
-
 TILES_FOLDER = "maps/chernarus/"
 SNAPSHOTS_FOLDER = "snapshots"
 CACHE_TIMEOUT = 86400
 TRANSPARENT_TILE = "transparent.png"
-os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True)
-os.makedirs(DB_DIR, exist_ok=True)
+os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True); os.makedirs(DB_DIR, exist_ok=True)
+
 
 # --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И УПРАВЛЕНИЕ ASYNCIO ЛУПОМ ---
 update_interval = 10
 update_thread = None
 update_running = False
 update_lock = threading.Lock()
-
 llm_client = None
 system_prompt_sent = False
-
 arma_loop: asyncio.AbstractEventLoop | None = None # Цикл событий для arma_connector
 arma_thread: threading.Thread | None = None      # Поток, в котором работает arma_loop
 
@@ -126,22 +106,23 @@ def run_async_from_sync(coro: Coroutine) -> any: # <-- Исправлена ан
         # Можно возбудить исключение дальше или вернуть None
         return None # Возвращаем None при другой ошибке
 
-# --- ИНИЦИАЛИЗАЦИЯ (ВЫНЕСЕНА) ---
+# --- ИНИЦИАЛИЗАЦИЯ (обновленная проверка LLM) ---
 logger.info("Инициализация LLMClient...")
-llm_client = None # Инициализируем как None
+llm_client = None # Гарантированно None в начале
 try:
+    # Создаем экземпляр, __init__ сам проверит работоспособность и установит флаг
     llm_client_instance = LLMClient(config_file="config.json", system_prompt_file="system_prompt.txt")
-    if llm_client_instance.is_operational:
-         llm_client = llm_client_instance # Присваиваем глобальной переменной только если клиент готов
-         session_id = "arma_session"
-         if not llm_client.create_session(session_id):
-             logger.error("Не удалось создать сессию LLM, хотя клиент был операционен.")
-             llm_client = None # Сбрасываем, если сессию создать не удалось
-         else:
-             logger.info("LLM сессия 'arma_session' успешно создана")
+    if llm_client_instance.is_operational: # Проверяем флаг
+        session_id = "arma_session"
+        if llm_client_instance.create_session(session_id):
+            llm_client = llm_client_instance # Присваиваем только если все Ок
+            logger.info("LLMClient и сессия 'arma_session' успешно созданы.")
+        else:
+            logger.error("Не удалось создать сессию LLM.")
+            # llm_client остается None
     else:
-         logger.error("LLMClient не инициализирован из-за ошибки API или геолокации. Работа без LLM.")
-         # llm_client остается None
+        logger.error("LLMClient не инициализирован (API/геолокация?). Работа без LLM.")
+        # llm_client остается None
 except Exception as e:
     logger.exception(f"Критическая ошибка при создании объекта LLMClient: {e}")
     llm_client = None # Убедимся, что он None при любой ошибке
@@ -259,72 +240,84 @@ def arma_data_stream():
     return Response(event_stream(), mimetype="text/event-stream")
 
 
+# --- Маршрут /reports_stream (обновлен) ---
 @app.route("/reports_stream")
 def reports_stream():
     logger.info("Новое подключение к /reports_stream")
     def event_stream():
         global system_prompt_sent
         while True:
-            if not arma_loop or not arma_loop.is_running():
-                 logger.warning("SSE reports: Цикл Arma Connector не работает, разрыв соединения.")
-                 break
-
+            if not arma_loop or not arma_loop.is_running(): logger.warning("SSE reports: Цикл Arma не работает."); break
             report = None
             try:
-                # Пытаемся получить элемент из async очереди без блокировки
-                # или с очень маленьким таймаутом через run_async_from_sync
-                async def get_report_non_blocking():
-                    try:
-                        # Используем get_nowait или wait_for с таймаутом
-                        return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=0.05)
-                    except asyncio.TimeoutError:
-                        return None
-                    except asyncio.QueueEmpty: # На случай если get_nowait
-                         return None
-
-                report = run_async_from_sync(get_report_non_blocking())
+                async def get_report_non_blocking(): # Хелпер для неблокирующего получения
+                    try: return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=0.05)
+                    except asyncio.TimeoutError: return None
+                    except asyncio.QueueEmpty: return None
+                report = run_async_from_sync(get_report_non_blocking()) # Получаем через мост
 
                 if report:
-                    logger.info(f"SSE: Отправка репорта - {report}")
-                    # Проверяем start_mission
-                    if report.get("command") == "start_mission" and not system_prompt_sent:
-                        if llm_client and "arma_session" in llm_client.chat_sessions:
-                            logger.info("Обнаружен start_mission, запуск отправки системного промпта (async, без ожидания)...")
-                            # Просто запускаем корутину без ожидания future.result()
-                            asyncio.run_coroutine_threadsafe(send_system_prompt(), arma_loop)
-                            # НЕ ДЕЛАЕМ: success = run_async_from_sync(send_system_prompt())
-                            # Флаг system_prompt_sent будет установлен внутри самой send_system_prompt при успехе.
-                        else:
-                            logger.warning("Получен start_mission, но LLM клиент или сессия не готовы.")
+                    log_msg_part = report.get('command', report.get('t', 'Unknown')) # Что логгировать
+                    logger.info(f"SSE: Отправка репорта - {log_msg_part}")
+                    # Обработка start_mission
+                    if report.get("command") == "start_mission":
+                        if not system_prompt_sent:
+                            mission_markers = report.get("markers", [])
+                            if llm_client and "arma_session" in llm_client.chat_sessions:
+                                logger.info("start_mission: Запуск отправки промпта и маркеров (async)...")
+                                # Запускаем БЕЗ ожидания
+                                asyncio.run_coroutine_threadsafe(send_system_prompt(mission_markers), arma_loop)
+                            else: logger.warning("start_mission: LLM не готов.")
+                        else: logger.info("start_mission: Промпт уже отправлен.")
 
-                    yield f"data: {json.dumps(report)}\n\n"
-                    # Сообщаем async очереди, что элемент обработан (тоже через мост)
-                    run_async_from_sync(arma_connector.mark_report_done()) # <--- ИЗМЕНЕНИЕ
+                    yield f"data: {json.dumps(report)}\n\n" # Отправляем клиенту
+                    # Отмечаем репорт как обработанный в async очереди
+                    run_async_from_sync(arma_connector.mark_report_done())
                 else:
-                    # Если отчета нет, ждем немного
-                    time.sleep(0.1)
-            except Exception as e:
-                logger.error(f"Ошибка в цикле reports_stream: {e}")
-                break
+                    time.sleep(0.1) # Пауза, если очередь пуста
+            except Exception as e: logger.error(f"Ошибка в цикле reports_stream: {e}"); break
         logger.warning("Цикл event_stream для /reports_stream завершен.")
     return Response(event_stream(), mimetype="text/event-stream")
 
 
-# send_system_prompt ДОЛЖНА быть async
-async def send_system_prompt():
+# --- Функция send_system_prompt (принимает markers, async) ---
+async def send_system_prompt(markers: list = None):
     global system_prompt_sent, llm_client
-    if llm_client and "arma_session" in llm_client.chat_sessions and not system_prompt_sent:
-        logger.info("(async) Отправка системного промпта в LLM...")
-        success = await llm_client.send_system_prompt("arma_session")
-        if success:
-            system_prompt_sent = True
-            logger.info("(async) Системный промпт успешно отправлен в LLM")
-            return True # Возвращаем успех
-        else:
-            logger.error("(async) Не удалось отправить системный промпт в LLM")
-            return False # Возвращаем неудачу
-    # ... (остальные логи без изменений) ...
-    return False # Возвращаем False, если не отправляли
+    if not llm_client or not llm_client.is_operational or "arma_session" not in llm_client.chat_sessions:
+         logger.error("(async) Невозможно отправить системный промпт: LLM клиент не готов.")
+         return False
+    if system_prompt_sent:
+         logger.info("(async) Системный промпт уже был отправлен ранее.")
+         return True
+
+    logger.info("(async) Отправка основного системного промпта в LLM...")
+    prompt_success = await llm_client.send_system_prompt("arma_session")
+    if not prompt_success:
+        logger.error("(async) Не удалось отправить основной системный промпт.")
+        return False
+
+    logger.info("(async) Основной системный промпт успешно отправлен.")
+    system_prompt_sent = True # Устанавливаем флаг
+
+    if markers:
+        logger.info(f"(async) Отправка данных маркеров ({len(markers)} шт.) в LLM...")
+        marker_message_content = {"context": "mission_markers", "markers": markers}
+        try:
+             markers_json_str = json.dumps(marker_message_content, ensure_ascii=False)
+             logger.debug(f"Отправка сообщения с маркерами: {markers_json_str}")
+             # Передаем как user_input строку JSON
+             marker_response = await llm_client.send_message(
+                 "arma_session",
+                 user_input=f"Initial mission markers data: {markers_json_str}"
+             )
+             if marker_response: logger.info("(async) Данные маркеров успешно отправлены в LLM.")
+             else: logger.error("(async) Не удалось отправить данные маркеров в LLM (пустой ответ/ошибка).")
+        except Exception as e: logger.exception("(async) Ошибка при отправке данных маркеров в LLM.")
+    else:
+        logger.info("(async) Данные маркеров не предоставлены.")
+
+    return system_prompt_sent
+
 
 
 @app.route("/send_callback", methods=["POST"])

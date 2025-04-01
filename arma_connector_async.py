@@ -1,4 +1,4 @@
-# --- START OF FILE arma_connector_async.py (с бесконечным переподключением) ---
+# --- START OF FILE arma_connector_async.py (с бесконечным переподключением и обработкой маркеров) ---
 
 import asyncio
 import json
@@ -6,74 +6,117 @@ import logging
 import time
 from asyncio import StreamReader, StreamWriter, Lock, Queue
 
-# --- Настройка логгера (без изменений) ---
+# --- Настройка логгера (из server.py) ---
+# Логгер настраивается в server.py, здесь просто получаем его
 logger = logging.getLogger("ArmaConnectorAsync")
+# Уровень будет установлен в server.py
 # ---
 
-# --- Глобальное состояние и примитивы asyncio (без изменений) ---
+# --- Глобальное состояние и примитивы asyncio ---
 arma_data = None
 data_lock = Lock()
 reports_queue = Queue()
 writer_12347: StreamWriter | None = None
 # ---
 
-# --- Функция handle_arma_connection (Без изменений) ---
+# --- Функция handle_arma_connection (с обработкой маркеров) ---
 async def handle_arma_connection(reader: StreamReader, writer: StreamWriter):
-    # ... (код как в предыдущей версии) ...
-    global arma_data; peername = writer.get_extra_info('peername'); logger.debug(f"Подключение от Arma {peername} (12346)")
+    """Обрабатывает одно входящее подключение от Arma (порт 12346)."""
+    global arma_data
+    peername = writer.get_extra_info('peername')
+    logger.debug(f"Подключение от Arma {peername} (12346)")
     received = bytearray()
     try:
+        # Цикл чтения данных
         while True:
-            chunk = await reader.read(8192);
-            if not chunk: logger.debug(f"Соединение {peername} закрыто Arma."); break
+            chunk = await reader.read(8192)
+            if not chunk:
+                logger.debug(f"Соединение {peername} закрыто Arma.")
+                break
             received.extend(chunk)
             try:
+                # Проверяем, похожи ли данные на валидный JSON
                 decoded_check = received.decode('utf-8')
-                if decoded_check == "[start_mission]" or ('{' in decoded_check and decoded_check.count('{') == decoded_check.count('}')): break
-            except UnicodeDecodeError: continue
+                if '{' in decoded_check and decoded_check.count('{') == decoded_check.count('}'):
+                   logger.debug(f"Получен полный JSON от {peername} ({len(received)} байт), обрабатываем...")
+                   break
+            except UnicodeDecodeError:
+                # Неполный UTF-8 символ, читаем дальше
+                continue
+
+        # Обработка полученных данных
         if received:
             try:
                 decoded_data = received.decode('utf-8')
-                if decoded_data == "[start_mission]":
-                    async with data_lock: arma_data = None
-                    await reports_queue.put({"command": "start_mission"}); logger.info("start_mission получен.")
-                else:
-                    parsed_data = json.loads(decoded_data)
-                    if isinstance(parsed_data, dict) and "sides" in parsed_data:
-                        async with data_lock: arma_data = parsed_data; logger.info("update_data принято.")
-                    elif isinstance(parsed_data, list):
-                        count = 0
-                        for report in parsed_data:
-                            if isinstance(report, list):
-                                try: await reports_queue.put(dict(report)); count += 1
-                                except Exception as e: logger.error(f"Ошибка репорта: {report}, {e}")
-                            else: logger.error(f"Неверный формат репорта: {report}")
-                        logger.info(f"Принято {count} репортов.")
-                    else: logger.error(f"Неизвестный формат JSON: {type(parsed_data)}")
-            except json.JSONDecodeError as e: logger.error(f"Ошибка JSON: {e}")
-            except UnicodeDecodeError as e: logger.error(f"Ошибка UTF-8: {e}")
-            except Exception as e: logger.exception(f"Ошибка обработки данных: {e}")
-    except asyncio.IncompleteReadError: logger.warning(f"Соед. {peername} закрыто не полностью.")
-    except ConnectionResetError: logger.warning(f"Соед. {peername} сброшено.")
-    except Exception as e: logger.exception(f"Ошибка handle_arma_connection {peername}: {e}")
-    finally:
-        try: writer.close(); await writer.wait_closed()
-        except Exception: pass; logger.debug(f"Соед. с {peername} закрыто.")
+                parsed_data = json.loads(decoded_data) # Сразу парсим JSON
 
-# --- ИЗМЕНЕННАЯ ФУНКЦИЯ УСТАНОВКИ СОЕДИНЕНИЯ ---
+                # Логика обработки разных типов сообщений
+                if isinstance(parsed_data, dict) and parsed_data.get("command") == "start_mission":
+                    # Новое сообщение о старте миссии с маркерами
+                    mission_markers = parsed_data.get("markers", [])
+                    async with data_lock:
+                        arma_data = None # Сбрасываем данные
+                    await reports_queue.put({"command": "start_mission", "markers": mission_markers})
+                    logger.info(f"Получена команда start_mission от ARMA с {len(mission_markers)} маркерами.")
+
+                elif isinstance(parsed_data, dict) and "sides" in parsed_data:
+                    # Данные update_data
+                    async with data_lock:
+                        arma_data = parsed_data
+                    logger.info("Данные от ARMA (update_data) приняты.")
+
+                elif isinstance(parsed_data, list):
+                     # Массив репортов от detectEvents
+                    report_count = 0
+                    for report in parsed_data:
+                        if isinstance(report, list):
+                            try:
+                                report_dict = dict(report)
+                                await reports_queue.put(report_dict)
+                                report_count += 1
+                            except (ValueError, TypeError) as e:
+                                logger.error(f"Ошибка преобразования репорта: {report}, {e}")
+                        else:
+                            logger.error(f"Неверный формат репорта в массиве: {report}")
+                    if report_count > 0:
+                        logger.info(f"Принято {report_count} репортов от ARMA.")
+
+                else:
+                    logger.error(f"Неизвестный формат корневого JSON от Arma: {type(parsed_data)}")
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Ошибка парсинга JSON от {peername}: {e}. Данные: {received.decode('utf-8', errors='ignore')}")
+            except UnicodeDecodeError as e:
+                logger.error(f"Ошибка декодирования UTF-8 от {peername}: {e}")
+            except Exception as e:
+                 logger.exception(f"Непредвиденная ошибка при обработке данных от {peername}: {e}")
+
+    # Обработка ошибок соединения
+    except asyncio.IncompleteReadError:
+        logger.warning(f"Соединение {peername} закрыто до получения полного сообщения.")
+    except ConnectionResetError:
+         logger.warning(f"Соединение {peername} было сброшено.")
+    except Exception as e:
+        logger.exception(f"Ошибка в handle_arma_connection для {peername}: {e}")
+    finally:
+        # Закрытие соединения
+        logger.debug(f"Закрытие соединения с {peername}")
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception as e_close:
+             logger.error(f"Ошибка при закрытии соединения с {peername}: {e_close}")
+
+# --- Функция установки соединения (с бесконечными попытками) ---
 async def connect_to_arma(host: str, port: int, initial_delay: int = 3) -> StreamWriter:
-    """
-    Бесконечно пытается установить постоянное соединение с Arma для отправки.
-    Возвращает StreamWriter только при успехе.
-    """
+    """Бесконечно пытается установить постоянное соединение с Arma для отправки."""
     logger.info(f"Попытка установить постоянное соединение с Arma на {host}:{port} (бесконечные попытки)...")
     attempt = 0
     delay = initial_delay
     while True: # Бесконечный цикл попыток
         attempt += 1
         try:
-            # Устанавливаем таймаут на саму операцию подключения
-            # Это полезно, если ОС "замораживает" попытку надолго при недоступности хоста
+            # Таймаут на подключение
             _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=10.0)
             logger.info(f"УСПЕШНО установлено соединение с Arma на {host}:{port} (попытка {attempt})")
             return writer # Возвращаем writer ТОЛЬКО при успехе
@@ -85,107 +128,96 @@ async def connect_to_arma(host: str, port: int, initial_delay: int = 3) -> Strea
              logger.error(f"Ошибка сокета при подключении к {host}:{port}: {e}. Попытка {attempt}. Повтор через {delay} сек...")
         except Exception as e:
             logger.exception(f"Неизвестная ошибка при подключении к {host}:{port}: {e}. Попытка {attempt}. Повтор через {delay} сек...")
-
-        # Ждем перед следующей попыткой
+        # Пауза перед следующей попыткой
         await asyncio.sleep(delay)
-        # Можно добавить логику увеличения задержки, но для локалхоста 3 сек достаточно
-        # delay = min(delay + 1, 30) # Например, увеличиваем на 1 сек до макс. 30
+        # delay = min(delay + 1, 30) # Можно раскомментировать для увеличения задержки
 
-# --- initialize_connections (без существенных изменений, но теперь вызывает новую connect_to_arma) ---
+# --- Инициализация исходящего соединения (порт 12347) ---
 async def initialize_connections(host: str = '127.0.0.1'):
-    """Инициализирует постоянное исходящее соединение (теперь с бесконечными попытками)."""
+    """Инициализирует постоянное исходящее соединение на порт 12347."""
     global writer_12347
     logger.info("Инициализация исходящего соединения Arma (порт 12347)...")
-    # connect_to_arma теперь будет пытаться бесконечно,
-    # поэтому initialize_connections будет "висеть" здесь, пока не подключится.
-    # Это нормально, т.к. вызывается один раз при старте в asyncio цикле.
-    writer_12347 = await connect_to_arma(host, 12347)
-    # Если мы дошли сюда, значит, соединение установлено
+    writer_12347 = await connect_to_arma(host, 12347) # Ждем успешного подключения
     logger.info("Исходящее соединение на порт 12347 инициализировано.")
-    # logger.info("Инициализация исходящих соединений завершена.") # Это сообщение теперь излишне
 
-# --- Асинхронные функции для отправки данных в Arma ---
-# _send_message_persistent теперь полагается на connect_to_arma для переподключения
+# --- Отправка сообщения с переподключением ---
 async def _send_message_persistent(writer: StreamWriter | None, host: str, port: int, message_data: bytes) -> StreamWriter | None:
-    """Внутренняя функция для отправки через постоянное соединение с бесконечным переподключением."""
+    """Отправляет через постоянное соединение с бесконечным переподключением."""
     current_writer = writer
     if current_writer is None or current_writer.is_closing():
-        logger.warning(f"Соединение на {host}:{port} отсутствует/закрывается. Переподключение (бесконечные попытки)...")
-        # connect_to_arma теперь будет пытаться бесконечно, пока не подключится
-        current_writer = await connect_to_arma(host, port)
-        # Если мы здесь, значит, переподключились успешно
+        logger.warning(f"Соединение на {host}:{port} отсутствует/закрывается. Переподключение...")
+        current_writer = await connect_to_arma(host, port) # Пытаемся бесконечно
         logger.info(f"Переподключение к {host}:{port} успешно.")
-
-    # После успешного (пере)подключения, пытаемся отправить
     try:
         logger.debug(f"Отправка {len(message_data)} байт на {host}:{port}...")
         current_writer.write(message_data)
         await current_writer.drain()
         logger.debug(f"Данные успешно отправлены на {host}:{port}.")
         return current_writer # Возвращаем активный writer
-    except (ConnectionResetError, BrokenPipeError, OSError) as e: # Добавили OSError
+    except (ConnectionResetError, BrokenPipeError, OSError) as e:
         logger.error(f"Ошибка соединения при отправке на {host}:{port}: {e}. Соединение будет восстановлено при следующей попытке.")
-        try:
-            current_writer.close()
-            await current_writer.wait_closed()
+        try: current_writer.close(); await current_writer.wait_closed()
         except Exception: pass
-        # Возвращаем None, чтобы при следующей отправке сработала логика переподключения
-        return None
+        return None # Сигнализируем о необходимости переподключения
     except Exception as e:
         logger.exception(f"Неизвестная ошибка при отправке на {host}:{port}: {e}")
-        try:
-            current_writer.close()
-            await current_writer.wait_closed()
+        try: current_writer.close(); await current_writer.wait_closed()
         except Exception: pass
-        return None # Тоже возвращаем None
+        return None # Сигнализируем о необходимости переподключения
 
-# --- send_callback_to_arma_async (без изменений, вызывает _send_message_persistent) ---
+# --- Отправка callback (порт 12347) ---
 async def send_callback_to_arma_async(message: dict | str, host: str = '127.0.0.1'):
+    """Асинхронно отправляет callback в Arma на порт 12347."""
     global writer_12347
     try:
         json_data = json.dumps(message) if isinstance(message, dict) else str(message)
         encoded_data = json_data.encode('utf-8')
-        # _send_message_persistent теперь сам обработает переподключение, если нужно
         new_writer = await _send_message_persistent(writer_12347, host, 12347, encoded_data)
         if new_writer:
-             writer_12347 = new_writer # Обновляем глобальный writer, если он изменился
+             writer_12347 = new_writer # Обновляем глобальный writer
              logger.info(f"Callback отправлен в ARMA (12347): {json_data[:100]}...")
         else:
-             # Если _send_message_persistent вернул None, значит отправка не удалась,
-             # но он уже залоггировал ошибку. Устанавливаем writer_12347 в None.
-             writer_12347 = None
-             logger.error(f"Не удалось отправить callback в ARMA (12347) из-за ошибки соединения/отправки: {json_data[:100]}...")
+             writer_12347 = None # Сбрасываем writer при ошибке отправки
+             logger.error(f"Не удалось отправить callback в ARMA (12347) из-за ошибки: {json_data[:100]}...")
     except Exception as e:
         logger.exception(f"Критическая ошибка в send_callback_to_arma_async: {e}")
-        # При критической ошибке тоже сбрасываем writer
         if writer_12347:
              try: writer_12347.close(); await writer_12347.wait_closed()
              except Exception: pass
         writer_12347 = None
 
-# --- Функция get_arma_data_async (без изменений) ---
+# --- Получение данных Arma (для server.py) ---
 async def get_arma_data_async():
+    """Асинхронно и безопасно возвращает текущие данные arma_data."""
     async with data_lock:
         return arma_data
 
-# --- Функция mark_report_done (из прошлого шага, без изменений) ---
+# --- Отметка об обработке репорта (для server.py) ---
 async def mark_report_done():
-    try: reports_queue.task_done()
-    except ValueError: logger.warning("Попытка task_done() для очереди репортов не к месту.")
-    except Exception as e: logger.exception("Ошибка task_done() для очереди репортов.")
+    """Сообщает асинхронной очереди, что элемент обработан."""
+    try:
+        reports_queue.task_done()
+    except ValueError:
+        # Может возникнуть, если вызвать task_done() больше раз, чем было put()
+        logger.warning("Попытка вызвать task_done() для очереди репортов, когда не ожидалось.")
+    except Exception as e:
+        logger.exception("Неизвестная ошибка при вызове task_done() для очереди репортов.")
 
 
-# --- Функция start_server (без изменений) ---
+# --- Запуск сервера (порт 12346) ---
 async def start_server(host: str = '127.0.0.1', port: int = 12346):
+    """Запускает сервер asyncio для прослушивания порта 12346 и инициализирует исходящие соединения."""
     server = await asyncio.start_server(handle_arma_connection, host, port)
     addr = server.sockets[0].getsockname()
     logger.info(f"Async ARMA сервер запущен и слушает на {addr}")
-    await initialize_connections(host) # Ждем первого успешного подключения к 12347
+    # Инициализация исходящего соединения теперь будет ждать успеха
+    await initialize_connections(host)
     async with server:
         await server.serve_forever()
 
-# --- Тестовый блок (если нужен) ---
+# --- Тестовый блок ---
 if __name__ == '__main__':
-    pass
+    print("Этот файл предназначен для импорта, а не для прямого запуска.")
+    # Можно добавить код для простого теста, если нужно
 
-# --- КОНЕЦ ФАЙЛА arma_connector_async.py (с бесконечным переподключением) ---
+# --- КОНЕЦ ФАЙЛА arma_connector_async.py ---
