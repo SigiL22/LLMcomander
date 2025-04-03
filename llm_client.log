@@ -11,3 +11,39 @@
 17:06:48 [INFO] llm_client: Сессия arma_session успешно создана.
 17:58:02 [INFO] llm_client: Инициализация LLMClient...
 17:58:02 [ERROR] llm_client: Библиотека google.generativeai или ее компоненты не найдены. LLMClient будет нерабочим.
+20:49:42 [INFO] llm_client: Инициализация LLMClient...
+20:49:42 [ERROR] llm_client: Библиотека google.generativeai или ее компоненты не найдены. LLMClient будет нерабочим.
+21:12:31 [INFO] llm_client: Инициализация LLMClient...
+21:12:31 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+21:12:31 [INFO] llm_client: Конфигурация Google API...
+21:12:31 [INFO] llm_client: Проверка доступности API и моделей...
+21:12:31 [INFO] llm_client: Доступные модели (generateContent): ['gemini-1.0-pro-vision-latest', 'gemini-pro-vision', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002', 'gemini-1.5-pro', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001', 'gemini-1.5-flash-001-tuning', 'gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-8b-001', 'gemini-1.5-flash-8b-latest', 'gemini-1.5-flash-8b-exp-0827', 'gemini-1.5-flash-8b-exp-0924', 'gemini-2.5-pro-exp-03-25', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-2.0-pro-exp', 'gemini-2.0-pro-exp-02-05', 'gemini-exp-1206', 'gemini-2.0-flash-thinking-exp-01-21', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-flash-thinking-exp-1219', 'learnlm-1.5-pro-experimental', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it']
+21:12:31 [INFO] llm_client: Выбранная модель 'gemini-2.5-pro-exp-03-25' доступна.
+21:12:31 [INFO] llm_client: Попытка инициализации модели: gemini-2.5-pro-exp-03-25
+21:12:31 [INFO] llm_client: Объект модели gemini-2.5-pro-exp-03-25 создан.
+21:12:31 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+21:12:31 [INFO] llm_client: Создание chat_session для arma_session
+21:12:31 [INFO] llm_client: Сессия arma_session успешно создана.
+21:14:02 [INFO] llm_client: Инициализация LLMClient...
+21:14:02 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+21:14:02 [INFO] llm_client: Конфигурация Google API...
+21:14:02 [INFO] llm_client: Проверка доступности API и моделей...
+21:14:03 [INFO] llm_client: Доступные модели (generateContent): ['gemini-1.0-pro-vision-latest', 'gemini-pro-vision', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002', 'gemini-1.5-pro', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001', 'gemini-1.5-flash-001-tuning', 'gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-8b-001', 'gemini-1.5-flash-8b-latest', 'gemini-1.5-flash-8b-exp-0827', 'gemini-1.5-flash-8b-exp-0924', 'gemini-2.5-pro-exp-03-25', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-2.0-pro-exp', 'gemini-2.0-pro-exp-02-05', 'gemini-exp-1206', 'gemini-2.0-flash-thinking-exp-01-21', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-flash-thinking-exp-1219', 'learnlm-1.5-pro-experimental', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it']
+21:14:03 [INFO] llm_client: Выбранная модель 'gemini-2.5-pro-exp-03-25' доступна.
+21:14:03 [INFO] llm_client: Попытка инициализации модели: gemini-2.5-pro-exp-03-25
+21:14:03 [INFO] llm_client: Объект модели gemini-2.5-pro-exp-03-25 создан.
+21:14:03 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+21:14:03 [INFO] llm_client: Создание chat_session для arma_session
+21:14:03 [INFO] llm_client: Сессия arma_session успешно создана.
+21:19:00 [INFO] llm_client: Инициализация LLMClient...
+21:19:00 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+21:19:00 [INFO] llm_client: Конфигурация Google API...
+21:19:00 [INFO] llm_client: Проверка доступности API и моделей...
+21:19:01 [INFO] llm_client: Доступные модели (generateContent): ['gemini-1.0-pro-vision-latest', 'gemini-pro-vision', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002', 'gemini-1.5-pro', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001', 'gemini-1.5-flash-001-tuning', 'gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-8b-001', 'gemini-1.5-flash-8b-latest', 'gemini-1.5-flash-8b-exp-0827', 'gemini-1.5-flash-8b-exp-0924', 'gemini-2.5-pro-exp-03-25', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-2.0-pro-exp', 'gemini-2.0-pro-exp-02-05', 'gemini-exp-1206', 'gemini-2.0-flash-thinking-exp-01-21', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-flash-thinking-exp-1219', 'learnlm-1.5-pro-experimental', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it']
+21:19:01 [INFO] llm_client: Выбранная модель 'gemini-2.5-pro-exp-03-25' доступна.
+21:19:01 [INFO] llm_client: Попытка инициализации модели: gemini-2.5-pro-exp-03-25
+21:19:01 [INFO] llm_client: Объект модели gemini-2.5-pro-exp-03-25 создан.
+21:19:01 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+21:19:01 [INFO] llm_client: Создание chat_session для arma_session
+21:19:01 [INFO] llm_client: Сессия arma_session успешно создана.
+21:21:41 [INFO] llm_client: Доступные модели (generateContent): ['gemini-1.0-pro-vision-latest', 'gemini-pro-vision', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002', 'gemini-1.5-pro', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001', 'gemini-1.5-flash-001-tuning', 'gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-8b-001', 'gemini-1.5-flash-8b-latest', 'gemini-1.5-flash-8b-exp-0827', 'gemini-1.5-flash-8b-exp-0924', 'gemini-2.5-pro-exp-03-25', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-2.0-pro-exp', 'gemini-2.0-pro-exp-02-05', 'gemini-exp-1206', 'gemini-2.0-flash-thinking-exp-01-21', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-flash-thinking-exp-1219', 'learnlm-1.5-pro-experimental', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it']
