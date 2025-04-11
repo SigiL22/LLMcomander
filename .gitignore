@@ -7,3 +7,5 @@ __pycache__/arma_connector.cpython-313.pyc
 *.log
 *.log
 llm_client.log
+*.json
+*.log
