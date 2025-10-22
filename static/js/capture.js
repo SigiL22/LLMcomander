@@ -3,45 +3,46 @@
  * Функция captureMapArea создаёт скрытый offscreen-контейнер для рендеринга карты,
  * устанавливает нужный центр и зум (на основе target-маркера и заданной области из настроек миссии),
  * затем выполняет захват изображения с помощью html2canvas, сохраняет снимок в папку snapshots,
- * запрашивает данные зданий и названий из базы с ограничением области и сохраняет их в виде JSON,
- * а также собирает маркеры с дополнительных слоёв с учетом фильтрации по сторонам.
+ * запрашивает данные зданий и названий из базы (по ограничению области) и сохраняет их как JSON,
+ * а также фильтрует маркеры: для выбранной стороны (первый элемент массива sides) – берутся полные данные,
+ * для противоположных сторон – берутся маркеры, полученные по докладам.
  *
  * @param {number} targetCellX - координата X target-маркера в игровых единицах (например, номер ячейки)
  * @param {number} targetCellY - координата Y target-маркера в игровых единицах
  * @param {number} regionSize - размер области вокруг target (например, количество ячеек от центра)
  * @param {boolean} showCellLabels - флаг отображения подписей ячеек
- * @param {Array} sides - список сторон, для которых нужно отобразить маркеры; если пустой – показывать все
+ * @param {Array} sides - список сторон, где первый элемент — выбранная сторона, остальные – противоположные
  * @returns {Promise<Object>} - Promise, который разрешается объектом { mapImage, objects, labels }
  */
 function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, sides) {
   return new Promise((resolve, reject) => {
     console.log("[captureMapArea] Начало захвата карты с параметрами:", { targetCellX, targetCellY, regionSize, showCellLabels, sides });
-
-    // Загрузка конфигурации
+    
+    // Получаем конфигурацию
     const conf = Config.get();
     console.log("[captureMapArea] Загружена конфигурация:", conf);
-    const CELL_SIZE = 100; // игровой размер ячейки (в метрах)
+    const CELL_SIZE = 100; // размер игровой ячейки (в метрах)
     const MAX_ZOOM = conf.maxZoom || 9;
     const MAP_SIZE_METERS = conf.islandWidth || 15360;
     const mapImageWidth = conf.mapImageWidth || 32768;
     const PIXELS_PER_METER_ZOOM_7 = mapImageWidth / MAP_SIZE_METERS;
-    const WINDOW_MARGIN = 0.1; // 10% дополнительного размера
+    const WINDOW_MARGIN = 0.1; // дополнительный запас 10%
 
     // Вычисляем центр в игровых координатах
     const centerX = targetCellX * CELL_SIZE + CELL_SIZE / 2;
     const centerY = targetCellY * CELL_SIZE + CELL_SIZE / 2;
     console.log("[captureMapArea] Игровой центр:", { centerX, centerY });
 
-    // Определяем область захвата (2 * regionSize + 1 ячеек)
+    // Определяем область захвата: 2*regionSize+1 ячеек
     const areaCells = 2 * regionSize + 1;
     const areaMeters = areaCells * CELL_SIZE;
     const minX = centerX - areaMeters / 2;
     const maxX = centerX + areaMeters / 2;
     const minY = centerY - areaMeters / 2;
     const maxY = centerY + areaMeters / 2;
-    console.log("[captureMapArea] Область захвата (метры):", { minX, maxX, minY, maxY });
+    console.log("[captureMapArea] Область захвата (в метрах):", { minX, maxX, minY, maxY });
 
-    // Преобразование в Leaflet-координаты
+    // Преобразуем в координаты Leaflet
     const centerLatLng = gameToLatLng(centerX, centerY, conf);
     console.log("[captureMapArea] Центр карты (Leaflet):", centerLatLng);
 
@@ -61,10 +62,10 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
     windowHeight = Math.round(Math.min(windowHeight, MAX_WINDOW_SIZE));
     console.log("[captureMapArea] Определён зум и размеры:", { zoom, windowWidth, windowHeight });
 
-    // Сохраняем данные области для запросов зданий и названий
+    // Область для запросов зданий/названий
     const area = { minX, maxX, minY, maxY };
 
-    // Создаем скрытый контейнер (не display:none, а позиционируем вне экрана)
+    // Создаём скрытый контейнер (не используя display:none)
     const hiddenContainer = document.createElement('div');
     hiddenContainer.style.position = 'absolute';
     hiddenContainer.style.top = '-9999px';
@@ -87,7 +88,7 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
     });
     console.log("[captureMapArea] Offscreen-карта инициализирована.");
 
-    // Добавляем базовый тайловый слой
+    // Добавляем тайловый слой
     const tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
       noWrap: true,
       attribution: "Карта Chernarus",
@@ -104,11 +105,11 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
     }).addTo(offscreenMap);
     console.log("[captureMapArea] Тайловый слой добавлен.");
 
-    // Устанавливаем вид карты (центр и зум)
+    // Устанавливаем вид карты (центр, зум)
     offscreenMap.setView([centerLatLng.lat, centerLatLng.lng], zoom);
     console.log("[captureMapArea] Вид карты установлен:", { centerLatLng, zoom });
 
-    // Добавляем дополнительные слои для отрисовки координатной сетки, подписей и маркеров
+    // Добавляем дополнительные слои: GridLayer, NamesLayer и UnitLayer
     var gridLayerInstance = new GridLayer();
     gridLayerInstance.addTo(offscreenMap);
     console.log("[captureMapArea] GridLayer добавлен.");
@@ -121,32 +122,32 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
     unitLayerInstance.addTo(offscreenMap);
     console.log("[captureMapArea] UnitLayer добавлен.");
 
-    // Принудительно вызываем перерисовку слоев (если предусмотрены методы)
+    // Принудительная перерисовка (если соответствующие методы определены)
     if (typeof gridLayerInstance._redraw === "function") {
       gridLayerInstance._redraw();
       console.log("[captureMapArea] Перерисовка GridLayer выполнена.");
     }
     if (typeof namesLayerInstance._createMarkers === "function") {
       namesLayerInstance._createMarkers();
-      console.log("[captureMapArea] Создание маркеров в NamesLayer выполнено.");
+      console.log("[captureMapArea] Маркеры NamesLayer созданы.");
     }
 
-    // Отключаем интерактивность
+    // Отключаем интерактивность карты
     offscreenMap.dragging.disable();
     offscreenMap.touchZoom.disable();
     offscreenMap.doubleClickZoom.disable();
     offscreenMap.scrollWheelZoom.disable();
 
-    // После загрузки тайлов ждем окончания рендеринга
+    // После загрузки тайлов ждём окончательного рендеринга
     tileLayer.on('load', function() {
-      console.log("[captureMapArea] Тайлы загружены. Дополнительное ожидание...");
+      console.log("[captureMapArea] Тайлы загружены. Дополнительное ожидание для рендеринга...");
       setTimeout(() => {
         console.log("[captureMapArea] Запуск html2canvas для offscreen-контейнера.");
         html2canvas(hiddenContainer).then(canvas => {
           const mapImage = canvas.toDataURL("image/png");
           console.log("[captureMapArea] Снимок карты получен.");
 
-          // Сохраняем снимок в папку snapshots через endpoint /save_snapshot
+          // Сохраняем снимок в папку snapshots через /save_snapshot
           const snapshotFileName = "snapshot_" + new Date().toISOString().replace(/[:.]/g, "-") + ".png";
           console.log("[captureMapArea] Сохранение снимка с именем:", snapshotFileName);
           fetch('/save_snapshot', {
@@ -162,7 +163,7 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
             console.error("[captureMapArea] Ошибка сохранения снимка:", err);
           });
 
-          // Запрашиваем данные зданий из базы с ограничением по области
+          // Запрашиваем данные зданий из базы с ограничением области и сохраняем JSON
           fetch('/get_buildings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -192,7 +193,7 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
             console.error("[captureMapArea] Ошибка получения/сохранения зданий:", err);
           });
 
-          // Запрашиваем данные названий из базы с ограничением по области
+          // Запрашиваем данные названий из базы с ограничением области и сохраняем JSON
           fetch('/get_names_in_area', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -222,18 +223,85 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
             console.error("[captureMapArea] Ошибка получения/сохранения названий:", err);
           })
           .finally(() => {
-            // Сбор данных из слоев offscreen-карты с фильтрацией по сторонам
+            // Фильтрация маркеров по сторонам:
+            // Если параметр sides задан и не пуст, то первый элемент – выбранная сторона (полные данные из unitLayer._groupLayer),
+            // а для остальных сторон (противоположных) берём маркеры из unitLayer._reportGroupLayer.
             const bounds = offscreenMap.getBounds();
             console.log("[captureMapArea] Границы offscreen-карты:", bounds);
             const objects = [];
+            let chosenSide = (sides && sides.length > 0) ? sides[0] : null;
+            if (window.unitLayer) {
+              // Отбираем маркеры для выбранной стороны из полного слоя
+              if (window.unitLayer._groupLayer) {
+                window.unitLayer._groupLayer.eachLayer(marker => {
+                  if (bounds.contains(marker.getLatLng())) {
+                    if (!chosenSide || marker.options.data.side === chosenSide) {
+                      objects.push(marker.options.data);
+                    }
+                  }
+                });
+                console.log("[captureMapArea] Маркеры для выбранной стороны из полного слоя:", objects);
+              }
+              // Отбираем маркеры для противоположных сторон из слоя докладов
+              if (window.unitLayer._reportGroupLayer) {
+                window.unitLayer._reportGroupLayer.eachLayer(marker => {
+                  if (bounds.contains(marker.getLatLng())) {
+                    if (chosenSide && marker.options.data.side !== chosenSide) {
+                      objects.push(marker.options.data);
+                    }
+                  }
+                });
+                console.log("[captureMapArea] Дополнительные маркеры для противоположных сторон из слоя докладов добавлены.");
+              }
+            } else {
+              console.warn("[captureMapArea] Глобальный unitLayer недоступен.");
+            }
+            // Для labels оставляем без фильтрации (как в предыдущем варианте)
             const labels = [];
+            if (window.namesLayer && window.namesLayer._namesGroup) {
+              window.namesLayer._namesGroup.eachLayer(marker => {
+                if (bounds.contains(marker.getLatLng())) {
+                  labels.push(marker.options.data);
+                }
+              });
+              console.log("[captureMapArea] Собраны надписи из namesLayer:", labels);
+            } else {
+              console.warn("[captureMapArea] namesLayer или его группа недоступны.");
+            }
 
-            // Фильтрация маркеров unitLayer
-            if (window.unitLayer && window.unitLayer._groupLayer) {
-              window.unitLayer._groupLayer.eachLayer(marker => {
-                // Если массив sides не пустой, добавляем маркер только если его свойство side входит в него
-                const markerSide = marker.options.data.side;
-                if (bounds.contains(marker.getLatLng
+            // Очистка offscreen-карты и скрытого контейнера
+            offscreenMap.remove();
+            document.body.removeChild(hiddenContainer);
+            console.log("[captureMapArea] Offscreen-карта и скрытый контейнер удалены.");
+            // Возвращаем итоговые данные
+            resolve({
+              mapImage: mapImage,
+              objects: objects,
+              labels: labels
+            });
+          });
+        }).catch(err => {
+          console.error("[captureMapArea] Ошибка в html2canvas:", err);
+          offscreenMap.remove();
+          document.body.removeChild(hiddenContainer);
+          reject(err);
+        });
+      }, 500);
+    });
+
+    // Если тайлы не загрузятся за 10 секунд, возвращаем ошибку
+    setTimeout(() => {
+      if (!offscreenMap._loaded) {
+        console.error("[captureMapArea] Тайловый слой не загрузился за отведённое время.");
+        offscreenMap.remove();
+        if (document.body.contains(hiddenContainer)) {
+          document.body.removeChild(hiddenContainer);
+        }
+        reject(new Error("Тайловый слой не загрузился за отведённое время."));
+      }
+    }, 10000);
+  });
+}
 
 
 

@@ -1,5 +1,5 @@
 {
-    "geminy_api_key": "AIzaSyBxmvilzVWCV7Mx_XoPFLEcSTHUd_-hwuo",
-    "geminy_api_url": "https://api.gemini.googleapis.com/v1",
-    "model": "gemini-2.5-pro-exp-03-25"
+    "geminy_api_key": "AIzaSyDIMA18zXQW_pfkECD8Bc-4CSVR9awFJ0M",
+    "base_url": "https://gateway.ai.cloudflare.com/v1/bd9e46963aa412fee85055e131e47dc8/geminy/google-ai-studio",
+    "model": "gemini-2.5-flash"
 }
