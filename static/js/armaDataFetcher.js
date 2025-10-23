@@ -20,9 +20,27 @@ function setupReportsStream() {
     const reportSource = new EventSource('/reports_stream');
     reportSource.onmessage = function(event) {
         const report = JSON.parse(event.data);
-        console.log("Получен новый доклад:", report);
+        console.log("ТОЧКА 3: Получен объект report по SSE:", report);
+
+		if (report.t === "llm_log" && window.llmChat) {
+            // --- ДОБАВЬТЕ ЭТОТ ЛОГ ---
+            console.log("Обработка как llm_log");
+            window.llmChat.addMessage(`[СЕРВЕР]: ${report.message}`);
+        }
+		else if (report.t === "llm_response" && window.llmChat) {
+            // --- ДОБАВЬТЕ ЭТОТ ЛОГ ---
+            console.log("Обработка как llm_response");
+            let responseText = report.message;
+            try {
+                const jsonObject = JSON.parse(responseText);
+                responseText = JSON.stringify(jsonObject, null, 2);
+            } catch (e) {
+                // ...
+            }
+            window.llmChat.addMessage(`[LLM]:\n${responseText}`);
+        }
         reports.push(report);
-        window.unitLayer.updateReports(reports); // Передаем полный массив репортов
+        window.unitLayer.updateReports(reports);
     };
     reportSource.onerror = function() {
         console.error("Ошибка соединения с сервером SSE для докладов");

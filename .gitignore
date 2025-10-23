@@ -9,3 +9,4 @@ __pycache__/arma_connector.cpython-313.pyc
 llm_client.log
 *.json
 *.log
+*.log

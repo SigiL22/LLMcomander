@@ -26,7 +26,8 @@ logger.propagate = False
 arma_logger = logging.getLogger("ArmaConnectorAsync")
 arma_logger.setLevel(logging.INFO) # Устанавливаем уровень для логгера коннектора
 arma_logger.propagate = False
-logging.getLogger("waitress").setLevel(logging.WARNING)
+# logging.getLogger("waitress").setLevel(logging.WARNING)
+logging.getLogger("waitress").setLevel(logging.ERROR)
 if not logger.handlers:
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_formatter)
@@ -94,7 +95,7 @@ def run_async_from_sync(coro: Coroutine) -> any: # <-- Исправлена ан
     future: Future = asyncio.run_coroutine_threadsafe(coro, arma_loop)
     try:
         # Добавляем таймаут, чтобы не блокировать поток Flask навечно
-        result = future.result(timeout=15) # Таймаут 15 секунд (настройте по необходимости)
+        result = future.result(timeout=145) # Таймаут 15 секунд (настройте по необходимости)
         return result
     except TimeoutError:
         logger.error(f"Таймаут при ожидании результата async операции: {coro}")
@@ -156,7 +157,7 @@ try:
                     arma_connector.send_callback_to_arma_async({"command": "update_data"})
                 )
                 # Логирование успеха/неудачи теперь внутри send_callback_to_arma_async
-                logger.info(f"Команда update_data отправлена в ARMA (асинхронно), следующий вызов через {update_interval} сек")
+                #logger.info(f"Команда update_data отправлена в ARMA (асинхронно), следующий вызов через {update_interval} сек")
                 time.sleep(update_interval)
             except Exception as e:
                 # Логируем ошибку самого цикла или run_async_from_sync
@@ -258,9 +259,11 @@ def reports_stream():
 
                 if report:
                     log_msg_part = report.get('command', report.get('t', 'Unknown')) # Что логгировать
-                    logger.info(f"SSE: Отправка репорта - {log_msg_part}")
+                    logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {report}")
                     # Обработка start_mission
                     if report.get("command") == "start_mission":
+                        logger.info("Получена команда start_mission, сбрасываем флаг system_prompt_sent.")
+                        system_prompt_sent = False 
                         if not system_prompt_sent:
                             mission_markers = report.get("markers", [])
                             if llm_client and "arma_session" in llm_client.chat_sessions:
@@ -272,7 +275,7 @@ def reports_stream():
 
                     yield f"data: {json.dumps(report)}\n\n" # Отправляем клиенту
                     # Отмечаем репорт как обработанный в async очереди
-                    run_async_from_sync(arma_connector.mark_report_done())
+                    #run_async_from_sync(arma_connector.mark_report_done())
                 else:
                     time.sleep(0.1) # Пауза, если очередь пуста
             except Exception as e: logger.error(f"Ошибка в цикле reports_stream: {e}"); break
@@ -286,16 +289,32 @@ async def send_system_prompt(markers: list = None):
     if not llm_client or not llm_client.is_operational or "arma_session" not in llm_client.chat_sessions:
          logger.error("(async) Невозможно отправить системный промпт: LLM клиент не готов.")
          return False
-    if system_prompt_sent:
-         logger.info("(async) Системный промпт уже был отправлен ранее.")
-         return True
 
     logger.info("(async) Отправка основного системного промпта в LLM...")
-    prompt_success = await llm_client.send_system_prompt("arma_session")
-    if not prompt_success:
-        logger.error("(async) Не удалось отправить основной системный промпт.")
-        return False
-
+    # Получаем ответ от LLM
+    prompt_response = await llm_client.send_system_prompt("arma_session")
+    
+    if not prompt_response:
+        logger.error("(async) Не удалось отправить основной системный промпт или получен пустой ответ.")
+        # Отправляем сообщение об ошибке в UI
+        await arma_connector.reports_queue.put({
+            "t": "llm_log",
+            "message": "Ошибка: не удалось отправить системный промпт в LLM."
+        })
+        return
+    
+    # Отправляем сообщение об успехе в очередь
+    await arma_connector.reports_queue.put({
+        "t": "llm_log",
+        "message": "Системный промпт успешно отправлен."
+    })
+    
+    # Отправляем ОТВЕТ от LLM в очередь
+    await arma_connector.reports_queue.put({
+        "t": "llm_response",
+        "message": prompt_response
+    })
+    
     logger.info("(async) Основной системный промпт успешно отправлен.")
     system_prompt_sent = True # Устанавливаем флаг
 
@@ -306,11 +325,23 @@ async def send_system_prompt(markers: list = None):
              markers_json_str = json.dumps(marker_message_content, ensure_ascii=False)
              logger.debug(f"Отправка сообщения с маркерами: {markers_json_str}")
              # Передаем как user_input строку JSON
+             # Получаем ответ и на отправку маркеров
              marker_response = await llm_client.send_message(
                  "arma_session",
                  user_input=f"Initial mission markers data: {markers_json_str}"
              )
-             if marker_response: logger.info("(async) Данные маркеров успешно отправлены в LLM.")
+             if marker_response:
+                 logger.info("(async) Данные маркеров успешно отправлены в LLM.")
+                 # Отправляем сообщение об успехе в UI
+                 await arma_connector.reports_queue.put({
+                    "t": "llm_log",
+                    "message": f"Данные о {len(markers)} маркерах отправлены. LLM подтвердил получение."
+                 })
+                 # Отправляем ОТВЕТ от LLM на маркеры в UI
+                 await arma_connector.reports_queue.put({
+                    "t": "llm_response",
+                    "message": marker_response
+                 })
              else: logger.error("(async) Не удалось отправить данные маркеров в LLM (пустой ответ/ошибка).")
         except Exception as e: logger.exception("(async) Ошибка при отправке данных маркеров в LLM.")
     else:
@@ -632,13 +663,32 @@ def llm_command():
     png_path = data.get("png_path")
 
     try:
-        # Вызываем async функцию через мост
-        coro = llm_client.send_message("arma_session", json_input, png_path)
+        # Преобразуем словарь в строку JSON, если это необходимо
+        if isinstance(json_input, dict):
+            user_input_str = json.dumps(json_input, ensure_ascii=False)
+        else:
+            user_input_str = str(json_input)
+
+        # Вызываем async функцию через мост, передавая СТРОКУ
+        coro = llm_client.send_message("arma_session", user_input_str, png_path)
         response = run_async_from_sync(coro)
 
         if response:
-            logger.info(f"Успешный ответ от LLM для команды.")
-            return jsonify({"status": "success", "response": response}), 200
+            # Создаем сообщение для трансляции всем клиентам
+            llm_response_message = {
+                "t": "llm_response",
+                "message": response  # response - это строка, которую вернул LLM
+            }
+            logger.info(f"ТОЧКА 1: Попытка поместить в очередь: {llm_response_message}")
+            # Помещаем ответ в очередь reports_queue для трансляции
+            if arma_loop:
+                asyncio.run_coroutine_threadsafe(
+                    arma_connector.reports_queue.put(llm_response_message), 
+                    arma_loop
+                )
+            
+            # Возвращаем простой успешный ответ, подтверждающий получение команды
+            return jsonify({"status": "success", "message": "Command received and queued"}), 200
         elif response is None and arma_loop and arma_loop.is_running(): # Явно проверяем None от run_async_from_sync
              logger.error(f"Получен пустой ответ от LLM или ошибка/таймаут в run_async_from_sync.")
              return jsonify({"status": "error", "message": "Пустой ответ или ошибка LLM"}), 500

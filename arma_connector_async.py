@@ -63,7 +63,7 @@ async def handle_arma_connection(reader: StreamReader, writer: StreamWriter):
                     # Данные update_data
                     async with data_lock:
                         arma_data = parsed_data
-                    logger.info("Данные от ARMA (update_data) приняты.")
+                    #logger.info("Данные от ARMA (update_data) приняты.")
 
                 elif isinstance(parsed_data, list):
                      # Массив репортов от detectEvents
@@ -121,7 +121,8 @@ async def connect_to_arma(host: str, port: int, initial_delay: int = 3) -> Strea
             logger.info(f"УСПЕШНО установлено соединение с Arma на {host}:{port} (попытка {attempt})")
             return writer # Возвращаем writer ТОЛЬКО при успехе
         except ConnectionRefusedError:
-            logger.warning(f"Соединение с {host}:{port} отклонено (Arma не запущена?). Попытка {attempt}. Повтор через {delay} сек...")
+            #logger.warning(f"Соединение с {host}:{port} отклонено (Arma не запущена?). Попытка {attempt}. Повтор через {delay} сек...")
+            pass
         except asyncio.TimeoutError:
              logger.warning(f"Таймаут при попытке подключения к {host}:{port}. Попытка {attempt}. Повтор через {delay} сек...")
         except OSError as e:
@@ -175,7 +176,7 @@ async def send_callback_to_arma_async(message: dict | str, host: str = '127.0.0.
         new_writer = await _send_message_persistent(writer_12347, host, 12347, encoded_data)
         if new_writer:
              writer_12347 = new_writer # Обновляем глобальный writer
-             logger.info(f"Callback отправлен в ARMA (12347): {json_data[:100]}...")
+             #logger.info(f"Callback отправлен в ARMA (12347): {json_data[:100]}...")
         else:
              writer_12347 = None # Сбрасываем writer при ошибке отправки
              logger.error(f"Не удалось отправить callback в ARMA (12347) из-за ошибки: {json_data[:100]}...")

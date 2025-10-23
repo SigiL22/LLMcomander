@@ -249,10 +249,14 @@ class LLMClient:
             return False
 
         try:
-            logger.info(f"Отправка системного промпта для сессии {session_id}...")
-            await self._retry_send_message(chat_session, self.system_prompt)
-            logger.info(f"Системный промпт успешно отправлен для сессии {session_id}")
-            return True
+            response_text = await self._retry_send_message(chat_session, self.system_prompt)
+            
+            if response_text:
+                logger.info(f"Системный промпт успешно отправлен для сессии {session_id}")
+                return response_text # Возвращаем текст ответа
+            else:
+                logger.error(f"LLM вернул пустой ответ на системный промпт для сессии {session_id}.")
+                return None
         except Exception as e:
             logger.error(f"Не удалось отправить системный промпт для сессии {session_id}.")
             return False

@@ -101,14 +101,24 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ json_input: jsonInput })
     })
-    .then(response => response.json())
+    .then(response => {
+        // --- НАЧАЛО ИЗМЕНЕНИЙ ---
+        // Теперь мы не ждем здесь ответ для отображения.
+        // Просто проверяем, что запрос прошел без сетевых ошибок.
+        if (!response.ok) {
+            // Если сервер вернул ошибку (4xx, 5xx), покажем ее
+            return response.json().then(errData => {
+                throw new Error(errData.message || `HTTP error! status: ${response.status}`);
+            });
+        }
+        return response.json();
+        // --- КОНЕЦ ИЗМЕНЕНИЙ ---
+    })
     .then(data => {
-      if (data.status === "success" && data.response) {
-        const responseText = JSON.stringify(data.response, null, 2);
-        addMessage(responseText); // Добавляем ответ LLM
-      } else {
-        addMessage(`Ошибка: ${data.message || 'Нет ответа от LLM'}`);
-      }
+        // --- НАЧАЛО ИЗМЕНЕНИЙ ---
+        // Ответ LLM больше не приходит сюда. Просто логируем успех отправки.
+        console.log("Команда успешно отправлена на сервер:", data);
+        // --- КОНЕЦ ИЗМЕНЕНИЙ ---
     })
     .catch(err => {
       addMessage(`Ошибка отправки: ${err}`);
@@ -118,4 +128,8 @@
 
   // Инициализация
   createChatWindow();
+  
+  window.llmChat = {
+    addMessage: addMessage
+  };
 })();
