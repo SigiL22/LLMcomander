@@ -5,10 +5,20 @@
     llmSide: null,      // Сторона LLM
     preset: null,       // Предустановка (сторона или группа)
     displaySide: null,  // Отображаемая сторона
-    llmModel: null      // Выбранная модель LLM
+    llmModel: null,     // Выбранная модель LLM
+    updateSidesData: function(newArmaData) {
+      if (newArmaData && newArmaData.sides) {
+        // Простое сравнение, чтобы не перерисовывать лишний раз
+        if (JSON.stringify(sidesData) !== JSON.stringify(newArmaData.sides)) {
+          console.log("MissionSettings: Получены обновленные данные о сторонах.");
+          sidesData = newArmaData.sides;
+        }
+      }
+    }
   };
-  let sidesData = {};   // Данные о сторонах и группах из /arma_data
+  let sidesData = {};   // Данные о сторонах и группах
   let availableModels = []; // Список доступных моделей LLM
+
 
   // Создание тулбара для открытия настроек миссии
   function createMissionSettingsToolbar() {
@@ -25,12 +35,14 @@
     const stored = localStorage.getItem('missionSettings');
     if (stored) {
       try {
-        window.missionSettings = JSON.parse(stored);
+        // Загружаем только сохраненные настройки, не трогая функцию
+        const parsedSettings = JSON.parse(stored);
+        Object.assign(window.missionSettings, parsedSettings);
       } catch (e) {
         console.error("Ошибка парсинга настроек миссии, используются значения по умолчанию", e);
       }
     }
-    // Загрузка данных о сторонах
+/*   // Загрузка данных о сторонах
     fetch('/arma_data')
       .then(response => response.json())
       .then(data => {
@@ -40,6 +52,7 @@
         }
       })
       .catch(err => console.error("Ошибка загрузки данных о сторонах:", err));
+*/
     // Загрузка списка моделей LLM
     fetch('/llm_models')
       .then(response => response.json())
@@ -300,7 +313,26 @@
       intervalInput.value = window.missionSettings.updateInterval;
     });
     sideSelect.addEventListener('change', () => {
-      window.missionSettings.llmSide = sideSelect.value;
+            const newSide = sideSelect.value;
+      window.missionSettings.llmSide = newSide;
+      
+      // Отправляем выбранную сторону на сервер
+      fetch('/set_llm_side', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ side: newSide })
+      })
+      .then(response => response.json())
+      .then(result => {
+        if (result.status === "success") {
+          console.log(`Сервер подтвердил выбор стороны LLM: ${result.side || 'не выбрана'}`);
+        } else {
+          console.error("Ошибка установки стороны LLM на сервере:", result);
+        }
+      })
+      .catch(err => {
+        console.error("Сетевая ошибка при установке стороны LLM:", err);
+      });
     });
     displaySideSelect.addEventListener('change', () => {
       window.missionSettings.displaySide = displaySideSelect.value;

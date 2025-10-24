@@ -9,6 +9,7 @@ import threading
 import asyncio
 import time
 import json
+import llm_tactical_controller
 from flask import Flask, send_from_directory, abort, request, jsonify, Response
 from concurrent.futures import Future # Необходимо для run_coroutine_threadsafe
 from collections.abc import Coroutine
@@ -63,6 +64,37 @@ llm_client = None
 system_prompt_sent = False
 arma_loop: asyncio.AbstractEventLoop | None = None # Цикл событий для arma_connector
 arma_thread: threading.Thread | None = None      # Поток, в котором работает arma_loop
+llm_assigned_side: str | None = None # Сторона, назначенная LLM
+roll_call_thread = None
+roll_call_running = False
+
+def roll_call_loop():
+    global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client
+    logger.info("Поток 'переклички' для LLM запущен.")
+    # Интервал переклички в секундах
+    roll_call_interval = 120 
+
+    while roll_call_running:
+        try:
+            time.sleep(roll_call_interval)
+            
+            # Отправляем отчет, только если сторона назначена и миссия активна (промпт отправлен)
+            if llm_assigned_side and system_prompt_sent and llm_client:
+                logger.info(f"Перекличка: запуск отчета для стороны {llm_assigned_side}")
+                # Вызываем асинхронную функцию из синхронного потока
+                run_async_from_sync(
+                    llm_tactical_controller.trigger_llm_report(
+                        llm_client,
+                        llm_assigned_side,
+                        context_text="Periodic roll call. Current status of your forces"
+                    )
+                )
+        except Exception as e:
+            logger.error(f"Ошибка в цикле 'переклички': {e}")
+            time.sleep(10) # Пауза в случае ошибки
+
+    logger.info("Поток 'переклички' для LLM остановлен.")
+
 
 # --- Функция для запуска asyncio loop в отдельном потоке ---
 def run_arma_loop():
@@ -186,6 +218,9 @@ try:
     update_running = True
     update_thread = threading.Thread(target=send_update_request, daemon=True)
     update_thread.start()
+    roll_call_running = True
+    roll_call_thread = threading.Thread(target=roll_call_loop, daemon=True)
+    roll_call_thread.start()
     logger.info("Поток send_update_request запущен.")
 
 except Exception as e:
@@ -260,6 +295,22 @@ def reports_stream():
                 if report:
                     log_msg_part = report.get('command', report.get('t', 'Unknown')) # Что логгировать
                     logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {report}")
+                    report_type = report.get("t")
+                    if report_type in ["enemy_detected", "waypoint_reached", "enemies_cleared", "vehicle_lost"]:
+                        if llm_assigned_side and system_prompt_sent and llm_client:
+                            group_name = report.get("g") or report.get("ge")
+                            if group_name:
+                                context = f"Event report from group '{group_name}': {report_type.upper()}. Current status of this group"
+                                # Запускаем асинхронную отправку отчета в фоне, не блокируя поток
+                                asyncio.run_coroutine_threadsafe(
+                                    llm_tactical_controller.trigger_llm_report(
+                                        llm_client,
+                                        llm_assigned_side,
+                                        context_text=context,
+                                        group_names=[group_name]
+                                    ),
+                                    arma_loop
+                                )
                     # Обработка start_mission
                     if report.get("command") == "start_mission":
                         logger.info("Получена команда start_mission, сбрасываем флаг system_prompt_sent.")
@@ -272,7 +323,7 @@ def reports_stream():
                                 asyncio.run_coroutine_threadsafe(send_system_prompt(mission_markers), arma_loop)
                             else: logger.warning("start_mission: LLM не готов.")
                         else: logger.info("start_mission: Промпт уже отправлен.")
-
+                    
                     yield f"data: {json.dumps(report)}\n\n" # Отправляем клиенту
                     # Отмечаем репорт как обработанный в async очереди
                     #run_async_from_sync(arma_connector.mark_report_done())
@@ -347,6 +398,19 @@ async def send_system_prompt(markers: list = None):
     else:
         logger.info("(async) Данные маркеров не предоставлены.")
 
+    if llm_assigned_side:
+        logger.info(f"(async) Отправка первоначальных данных о своих силах для стороны {llm_assigned_side}")
+        await llm_tactical_controller.trigger_llm_report(
+            llm_client,
+            llm_assigned_side,
+            context_text="Initial status of your forces"
+        )
+    else:
+        logger.warning("(async) Сторона для LLM не выбрана, первоначальные данные о силах не отправлены.")
+        await arma_connector.reports_queue.put({
+            "t": "llm_log",
+            "message": "ВНИМАНИЕ: Сторона LLM не выбрана в настройках. Данные о своих силах не отправлены."
+        })
     return system_prompt_sent
 
 
@@ -613,6 +677,28 @@ def save_json():
 
 # --- Маршруты LLM ---
 # Они остаются СИНХРОННЫМИ, но вызывают async функции через мост
+@app.route("/set_llm_side", methods=["POST"])
+def set_llm_side():
+    """
+    Устанавливает сторону, за которую играет LLM.
+    """
+    global llm_assigned_side
+    data = request.get_json()
+    if not data or "side" not in data:
+        return jsonify({"status": "error", "message": "Параметр 'side' отсутствует"}), 400
+    
+    new_side = data.get("side")
+    
+    # Пустая строка означает, что выбор снят
+    if new_side == "":
+        llm_assigned_side = None
+        logger.info("Выбор стороны для LLM снят.")
+    else:
+        llm_assigned_side = new_side
+        logger.info(f"Сторона для LLM установлена на: {llm_assigned_side}")
+
+    return jsonify({"status": "success", "side": llm_assigned_side}), 200
+
 
 @app.route("/llm_models", methods=["GET"])
 def get_llm_models():

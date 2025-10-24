@@ -8,7 +8,11 @@ function setupArmaDataStream() {
         if (data.status === "success") {
             console.log("Получены данные arma_data:", data.data);
             window.unitLayer.updateData(data.data, reports);
+            if (window.missionSettings && typeof window.missionSettings.updateSidesData === 'function') {
+              window.missionSettings.updateSidesData(data.data);
+            }
         }
+		
     };
     source.onerror = function() {
         console.error("Ошибка соединения с сервером SSE для arma_data");
