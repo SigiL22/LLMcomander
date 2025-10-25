@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from asyncio import StreamReader, StreamWriter, Lock, Queue
+from asyncio import StreamReader, StreamWriter, Lock, Queue, Event # <<< ДОБАВИТЬ Event
 
 # --- Настройка логгера (из server.py) ---
 # Логгер настраивается в server.py, здесь просто получаем его
@@ -17,6 +17,8 @@ arma_data = None
 data_lock = Lock()
 reports_queue = Queue()
 writer_12347: StreamWriter | None = None
+last_mission_markers: list | None = None # <<< НОВАЯ ПЕРЕМЕННАЯ
+markers_queue = Queue(maxsize=1)
 # ---
 
 # --- Функция handle_arma_connection (с обработкой маркеров) ---
@@ -54,8 +56,23 @@ async def handle_arma_connection(reader: StreamReader, writer: StreamWriter):
                 if isinstance(parsed_data, dict) and parsed_data.get("command") == "start_mission":
                     # Новое сообщение о старте миссии с маркерами
                     mission_markers = parsed_data.get("markers", [])
+                    # Сохраняем маркеры глобально
                     async with data_lock:
-                        arma_data = None # Сбрасываем данные
+                        last_mission_markers = mission_markers
+                    
+                    # --- НОВАЯ ЛОГИКА С ОЧЕРЕДЬЮ ---
+                    # Если в очереди что-то было, очищаем ее
+                    if not markers_queue.empty():
+                        try:
+                            markers_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            pass
+                    # Кладем свежие маркеры в "почтовый ящик"
+                    await markers_queue.put(mission_markers)
+                    # ---
+
+                    async with data_lock:
+                        arma_data = None
                     await reports_queue.put({"command": "start_mission", "markers": mission_markers})
                     logger.info(f"Получена команда start_mission от ARMA с {len(mission_markers)} маркерами.")
 
@@ -220,5 +237,31 @@ async def start_server(host: str = '127.0.0.1', port: int = 12346):
 if __name__ == '__main__':
     print("Этот файл предназначен для импорта, а не для прямого запуска.")
     # Можно добавить код для простого теста, если нужно
+    
+async def get_last_start_mission_markers_async():
+    """Асинхронно и безопасно возвращает последние полученные маркеры миссии."""
+    async with data_lock:
+        return last_mission_markers
+        
+async def get_last_start_mission_markers_async(wait_for_new: bool = False, timeout: int = 10):
+    """
+    Асинхронно возвращает последние маркеры.
+    Если wait_for_new=True, будет ждать новые маркеры из очереди.
+    """
+    if wait_for_new:
+        try:
+            logger.info(f"Ожидание маркеров из очереди (таймаут: {timeout} сек)...")
+            # Ждем и ИЗВЛЕКАЕМ маркеры из очереди
+            markers = await asyncio.wait_for(markers_queue.get(), timeout=timeout)
+            logger.info("Маркеры успешно получены из очереди.")
+            return markers
+        except asyncio.TimeoutError:
+            logger.error("Таймаут в ожидании маркеров из очереди.")
+            return None
+    else:
+        # Если не ждем, просто возвращаем сохраненное значение
+        async with data_lock:
+            return last_mission_markers
+
 
 # --- КОНЕЦ ФАЙЛА arma_connector_async.py ---

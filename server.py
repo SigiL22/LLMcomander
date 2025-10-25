@@ -65,23 +65,26 @@ system_prompt_sent = False
 arma_loop: asyncio.AbstractEventLoop | None = None # Цикл событий для arma_connector
 arma_thread: threading.Thread | None = None      # Поток, в котором работает arma_loop
 llm_assigned_side: str | None = None # Сторона, назначенная LLM
+roll_call_interval_seconds = 300 # По умолчанию 5 минут
 roll_call_thread = None
 roll_call_running = False
+roll_call_event = threading.Event() # Используем Event для прерывания сна
 
 def roll_call_loop():
-    global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client
+    global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client, roll_call_interval_seconds
     logger.info("Поток 'переклички' для LLM запущен.")
-    # Интервал переклички в секундах
-    roll_call_interval = 120 
 
     while roll_call_running:
         try:
-            time.sleep(roll_call_interval)
+            # Ждем либо таймаута, либо события
+            # Это позволит нам мгновенно менять интервал
+            roll_call_event.wait(timeout=roll_call_interval_seconds)
+            roll_call_event.clear() # Сбрасываем событие после ожидания
             
-            # Отправляем отчет, только если сторона назначена и миссия активна (промпт отправлен)
+            if not roll_call_running: break
+
             if llm_assigned_side and system_prompt_sent and llm_client:
                 logger.info(f"Перекличка: запуск отчета для стороны {llm_assigned_side}")
-                # Вызываем асинхронную функцию из синхронного потока
                 run_async_from_sync(
                     llm_tactical_controller.trigger_llm_report(
                         llm_client,
@@ -91,7 +94,7 @@ def roll_call_loop():
                 )
         except Exception as e:
             logger.error(f"Ошибка в цикле 'переклички': {e}")
-            time.sleep(10) # Пауза в случае ошибки
+            time.sleep(10)
 
     logger.info("Поток 'переклички' для LLM остановлен.")
 
@@ -138,7 +141,7 @@ def run_async_from_sync(coro: Coroutine) -> any: # <-- Исправлена ан
         logger.exception(f"Ошибка при выполнении async операции {coro}: {e}")
         # Можно возбудить исключение дальше или вернуть None
         return None # Возвращаем None при другой ошибке
-
+        
 # --- ИНИЦИАЛИЗАЦИЯ (обновленная проверка LLM) ---
 logger.info("Инициализация LLMClient...")
 llm_client = None # Гарантированно None в начале
@@ -296,7 +299,7 @@ def reports_stream():
                     log_msg_part = report.get('command', report.get('t', 'Unknown')) # Что логгировать
                     logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {report}")
                     report_type = report.get("t")
-                    if report_type in ["enemy_detected", "waypoint_reached", "enemies_cleared", "vehicle_lost"]:
+                    if report_type in ["enemy_detected", "waypoint_reached", "enemies_cleared", "vehicle_lost"] and system_prompt_sent:
                         if llm_assigned_side and system_prompt_sent and llm_client:
                             group_name = report.get("g") or report.get("ge")
                             if group_name:
@@ -312,17 +315,7 @@ def reports_stream():
                                     arma_loop
                                 )
                     # Обработка start_mission
-                    if report.get("command") == "start_mission":
-                        logger.info("Получена команда start_mission, сбрасываем флаг system_prompt_sent.")
-                        system_prompt_sent = False 
-                        if not system_prompt_sent:
-                            mission_markers = report.get("markers", [])
-                            if llm_client and "arma_session" in llm_client.chat_sessions:
-                                logger.info("start_mission: Запуск отправки промпта и маркеров (async)...")
-                                # Запускаем БЕЗ ожидания
-                                asyncio.run_coroutine_threadsafe(send_system_prompt(mission_markers), arma_loop)
-                            else: logger.warning("start_mission: LLM не готов.")
-                        else: logger.info("start_mission: Промпт уже отправлен.")
+
                     
                     yield f"data: {json.dumps(report)}\n\n" # Отправляем клиенту
                     # Отмечаем репорт как обработанный в async очереди
@@ -336,13 +329,18 @@ def reports_stream():
 
 # --- Функция send_system_prompt (принимает markers, async) ---
 async def send_system_prompt(markers: list = None):
-    global system_prompt_sent, llm_client
-    if not llm_client or not llm_client.is_operational or "arma_session" not in llm_client.chat_sessions:
+    global system_prompt_sent, llm_client, llm_assigned_side
+    
+    if not llm_assigned_side:
+        logger.error("(async) Попытка запустить send_system_prompt без выбранной стороны LLM. Отменено.")
+        return False
+
+    if not llm_client or not llm_client.is_operational:
          logger.error("(async) Невозможно отправить системный промпт: LLM клиент не готов.")
          return False
 
+    # 1. Отправка системного промпта
     logger.info("(async) Отправка основного системного промпта в LLM...")
-    # Получаем ответ от LLM
     prompt_response = await llm_client.send_system_prompt("arma_session")
     
     if not prompt_response:
@@ -352,68 +350,95 @@ async def send_system_prompt(markers: list = None):
             "t": "llm_log",
             "message": "Ошибка: не удалось отправить системный промпт в LLM."
         })
-        return
+        return False
     
     # Отправляем сообщение об успехе в очередь
-    await arma_connector.reports_queue.put({
-        "t": "llm_log",
-        "message": "Системный промпт успешно отправлен."
-    })
+    await arma_connector.reports_queue.put({"t": "llm_log", "message": "Системный промпт успешно отправлен."})
+    await llm_tactical_controller.handle_llm_response(prompt_response)
     
-    # Отправляем ОТВЕТ от LLM в очередь
-    await arma_connector.reports_queue.put({
-        "t": "llm_response",
-        "message": prompt_response
-    })
-    
+    system_prompt_sent = True
     logger.info("(async) Основной системный промпт успешно отправлен.")
-    system_prompt_sent = True # Устанавливаем флаг
+
+    # 2. Получаем свежие данные о силах
+    async with arma_connector.data_lock:
+        current_arma_data = arma_connector.arma_data
+    
+    filtered_forces = llm_tactical_controller.filter_data_for_llm(current_arma_data, llm_assigned_side)
+
+    # 3. Формируем единое сообщение с маркерами и силами
+    initial_data_payload = {}
+    context_text = "Initial mission data."
 
     if markers:
-        logger.info(f"(async) Отправка данных маркеров ({len(markers)} шт.) в LLM...")
-        marker_message_content = {"context": "mission_markers", "markers": markers}
-        try:
-             markers_json_str = json.dumps(marker_message_content, ensure_ascii=False)
-             logger.debug(f"Отправка сообщения с маркерами: {markers_json_str}")
-             # Передаем как user_input строку JSON
-             # Получаем ответ и на отправку маркеров
-             marker_response = await llm_client.send_message(
-                 "arma_session",
-                 user_input=f"Initial mission markers data: {markers_json_str}"
-             )
-             if marker_response:
-                 logger.info("(async) Данные маркеров успешно отправлены в LLM.")
-                 # Отправляем сообщение об успехе в UI
-                 await arma_connector.reports_queue.put({
-                    "t": "llm_log",
-                    "message": f"Данные о {len(markers)} маркерах отправлены. LLM подтвердил получение."
-                 })
-                 # Отправляем ОТВЕТ от LLM на маркеры в UI
-                 await arma_connector.reports_queue.put({
-                    "t": "llm_response",
-                    "message": marker_response
-                 })
-             else: logger.error("(async) Не удалось отправить данные маркеров в LLM (пустой ответ/ошибка).")
-        except Exception as e: logger.exception("(async) Ошибка при отправке данных маркеров в LLM.")
-    else:
-        logger.info("(async) Данные маркеров не предоставлены.")
+        logger.info(f"(async) Оптимизируем и добавляем данные о {len(markers)} маркерах в первоначальный отчет.")
+        
+        optimized_markers = []
+        for m in markers:
+            marker_data = {
+                "t": m.get("type"),
+                "p": m.get("pos"),
+                "text": m.get("text"),
+            }
+            
+            # --- НОВАЯ ЛОГИКА ДЛЯ ПОЛЯ 'size' ---
+            size = m.get("size")
+            # Добавляем поле 'size' только если оно существует и не является точечным (1x1)
+            if size and (size[0] > 1 or size[1] > 1):
+                marker_data["size"] = size
+            # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
-    if llm_assigned_side:
-        logger.info(f"(async) Отправка первоначальных данных о своих силах для стороны {llm_assigned_side}")
-        await llm_tactical_controller.trigger_llm_report(
-            llm_client,
-            llm_assigned_side,
-            context_text="Initial status of your forces"
-        )
+            optimized_markers.append(marker_data)
+            
+        initial_data_payload["mission_markers"] = optimized_markers
     else:
-        logger.warning("(async) Сторона для LLM не выбрана, первоначальные данные о силах не отправлены.")
-        await arma_connector.reports_queue.put({
-            "t": "llm_log",
-            "message": "ВНИМАНИЕ: Сторона LLM не выбрана в настройках. Данные о своих силах не отправлены."
-        })
+        logger.warning("(async) Данные маркеров не предоставлены для первоначального отчета.")
+
+    if filtered_forces:
+        logger.info(f"(async) Добавляем данные о {len(filtered_forces)} группах в первоначальный отчет.")
+        initial_data_payload["your_forces"] = filtered_forces
+    else:
+        logger.warning(f"(async) Нет данных о своих силах для первоначального отчета по стороне {llm_assigned_side}.")
+
+    # 4. Отправляем единый отчет, если есть что отправлять
+    if initial_data_payload:
+        try:
+            json_str = json.dumps(initial_data_payload, ensure_ascii=False)
+            full_prompt = f"{context_text}\n{json_str}"
+            
+            response = await llm_client.send_message("arma_session", user_input=full_prompt)
+            await llm_tactical_controller.handle_llm_response(response)
+            
+            await arma_connector.reports_queue.put({
+                "t": "llm_log",
+                "message": "Данные о маркерах и своих силах отправлены."
+            })
+
+        except Exception as e:
+            logger.exception("(async) Ошибка при отправке данных маркеров и сил в LLM.")
+    else:
+        logger.error("(async) Нет данных ни по маркерам, ни по силам для отправки в LLM.")
+
     return system_prompt_sent
 
-
+@app.route("/set_roll_call_interval", methods=["POST"])
+def set_roll_call_interval_route():
+    global roll_call_interval_seconds
+    data = request.get_json()
+    try:
+        new_interval_mins = int(data["interval"])
+        if new_interval_mins < 1:
+             return jsonify({"status": "error", "message": "Интервал должен быть положительным"}), 400
+        
+        roll_call_interval_seconds = new_interval_mins * 60
+        roll_call_event.set() # Прерываем сон потока, чтобы он сразу начал использовать новый интервал
+        
+        logger.info(f"Интервал переклички установлен на: {new_interval_mins} мин ({roll_call_interval_seconds} сек)")
+        return jsonify({"status": "success", "interval": new_interval_mins}), 200
+    except (ValueError, TypeError, KeyError):
+         return jsonify({"status": "error", "message": "Неверное значение интервала"}), 400
+    except Exception as e:
+         logger.exception(f"Ошибка в /set_roll_call_interval: {e}")
+         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/send_callback", methods=["POST"])
 def send_callback_endpoint():
@@ -676,23 +701,75 @@ def save_json():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # --- Маршруты LLM ---
-# Они остаются СИНХРОННЫМИ, но вызывают async функции через мост
+@app.route("/initiate_llm_start", methods=["POST"])
+def initiate_llm_start():
+    """
+    Инициирует отправку системного промпта, маркеров и данных о силах.
+    Вызывается клиентом после выбора стороны LLM.
+    """
+    global system_prompt_sent, llm_assigned_side
+    data = request.get_json()
+    
+    # Проверка, что сторона в запросе совпадает с сохраненной на сервере
+    if not data or data.get("side") != llm_assigned_side or not llm_assigned_side:
+        msg = "Ошибка: сторона не выбрана или не совпадает с серверной."
+        logger.error(msg)
+        return jsonify({"status": "error", "message": msg}), 400
+
+    # Проверка, чтобы не запускать инициализацию повторно
+    if system_prompt_sent:
+        msg = "Процесс инициализации LLM уже был запущен ранее."
+        logger.warning(msg)
+        return jsonify({"status": "error", "message": msg}), 409 # 409 Conflict
+
+    logger.info(f"Получен запрос на инициализацию LLM для стороны: {llm_assigned_side}. Запуск...")
+    
+    # Сбрасываем флаг перед запуском
+    system_prompt_sent = False
+    
+    async def initialization_wrapper():
+        # Ждем новые маркеры. Если они уже пришли, событие сработает мгновенно.
+        # Если нет - будем ждать до 10 секунд.
+        markers = await arma_connector.get_last_start_mission_markers_async(wait_for_new=True, timeout=10)
+
+        if markers is None:
+            logger.error("Не удалось получить маркеры миссии для инициализации LLM. Процесс прерван.")
+            # Сообщаем пользователю об ошибке
+            await arma_connector.reports_queue.put({
+                "t": "llm_log",
+                "message": "ОШИБКА: Не удалось получить маркеры от Arma. Инициализация LLM прервана."
+            })
+            return
+
+        # Если маркеры получены, запускаем основной процесс
+        await send_system_prompt(markers)
+
+    # Запускаем нашу обертку в фоне
+    if arma_loop:
+        asyncio.run_coroutine_threadsafe(
+            initialization_wrapper(),
+            arma_loop
+        )
+    
+    return jsonify({"status": "success", "message": "Процесс инициализации LLM запущен."})
+
+
 @app.route("/set_llm_side", methods=["POST"])
 def set_llm_side():
     """
-    Устанавливает сторону, за которую играет LLM.
+    Устанавливает или сбрасывает сторону, за которую играет LLM.
     """
-    global llm_assigned_side
+    global llm_assigned_side, system_prompt_sent
     data = request.get_json()
-    if not data or "side" not in data:
+    if data is None or "side" not in data: # Проверка на None
         return jsonify({"status": "error", "message": "Параметр 'side' отсутствует"}), 400
     
     new_side = data.get("side")
     
-    # Пустая строка означает, что выбор снят
     if new_side == "":
         llm_assigned_side = None
-        logger.info("Выбор стороны для LLM снят.")
+        system_prompt_sent = False # Сбрасываем флаг, если выбор стороны снят
+        logger.info("Выбор стороны для LLM снят, флаг system_prompt_sent сброшен.")
     else:
         llm_assigned_side = new_side
         logger.info(f"Сторона для LLM установлена на: {llm_assigned_side}")

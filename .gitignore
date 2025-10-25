@@ -10,3 +10,4 @@ llm_client.log
 *.json
 *.log
 *.log
+*.json

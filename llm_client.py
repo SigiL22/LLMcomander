@@ -1,3 +1,5 @@
+# --- START OF FILE llm_client.py ---
+
 import json
 import logging
 import asyncio
@@ -25,7 +27,6 @@ if not logger.handlers:
     console_handler.setFormatter(log_formatter)
     logger.addHandler(console_handler)
 
-    # Создаем директорию для логов, если необходимо
     log_dir = os.path.dirname("llm_client.log")
     if log_dir and not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -36,10 +37,11 @@ if not logger.handlers:
 # --- Конец настройки логгера ---
 
 class LLMClient:
+    # ... (весь код __init__, _load_config, _save_config, _load_system_prompt, get_available_models, _check_model_availability без изменений) ...
     def __init__(self, config_file: str = "config.json", system_prompt_file: str = "system_prompt.txt"):
         self.config_file = config_file
         self.system_prompt_file = system_prompt_file
-        self.is_operational = False  # Флаг работоспособности клиента
+        self.is_operational = False
         self.model: Optional[genai.GenerativeModel] = None
         self.chat_sessions: Dict[str, genai.ChatSession] = {}
         self.model_name: Optional[str] = None
@@ -48,12 +50,10 @@ class LLMClient:
 
         logger.info("Инициализация LLMClient...")
 
-        # --- 1. Проверка наличия библиотеки ---
         if not genai:
             logger.error("Библиотека google.generativeai не найдена. LLMClient будет нерабочим.")
             return
 
-        # --- 2. Загрузка конфигурации и системного промпта ---
         self.config = self._load_config()
         self.gemini_api_key = self.config.get("geminy_api_key")
         if not self.gemini_api_key:
@@ -70,7 +70,6 @@ class LLMClient:
             logger.error("Не удалось загрузить системный промпт. LLMClient не будет инициализирован.")
             return
 
-        # --- 3. Конфигурация API и инициализация модели ---
         try:
             logger.info("Конфигурация Google API...")
             genai.configure(api_key=self.gemini_api_key)
@@ -108,7 +107,6 @@ class LLMClient:
             return {}
 
     def _save_config(self):
-        """Сохраняет текущую конфигурацию в config.json."""
         if not self.config_file:
             return
         try:
@@ -135,7 +133,6 @@ class LLMClient:
             return None
 
     def get_available_models(self) -> List[str]:
-        """Получает список доступных моделей от API."""
         if not genai:
             return []
         try:
@@ -154,7 +151,6 @@ class LLMClient:
             return []
 
     def _check_model_availability(self, available_models: List[str]):
-        """Проверяет доступность выбранной модели в предоставленном списке."""
         if not self.model_name:
             logger.error("Имя модели не установлено для проверки доступности.")
             return
@@ -166,20 +162,19 @@ class LLMClient:
             logger.info(f"Выбранная модель '{self.model_name}' доступна.")
 
     async def _retry_send_message(self, chat_session, content, max_retries=3) -> Optional[str]:
-        """Пытается отправить сообщение с ретраями при ошибках."""
         delays = [2, 5, 10]
         last_exception = None
 
         for attempt in range(max_retries):
             try:
                 delay = delays[attempt]
-                logger.info(f"LLM отправка (попытка {attempt + 1}/{max_retries})...")
+                logger.debug(f"LLM отправка (попытка {attempt + 1}/{max_retries})...")
                 response = await asyncio.to_thread(
                     chat_session.send_message,
                     content
                 )
                 if response and hasattr(response, 'text'):
-                    logger.info(f"LLM ответ получен (попытка {attempt + 1}).")
+                    logger.debug(f"LLM ответ получен (попытка {attempt + 1}).")
                     return response.text
                 else:
                     logger.warning(f"LLM вернул пустой или некорректный ответ (попытка {attempt + 1}): {response}")
@@ -214,7 +209,6 @@ class LLMClient:
         return None
 
     def create_session(self, session_id: str) -> bool:
-        """Создает новую сессию чата."""
         if not self.is_operational or not self.model:
             logger.error("LLMClient не готов к работе, сессия не может быть создана.")
             return False
@@ -233,39 +227,42 @@ class LLMClient:
             logger.exception(f"Ошибка создания сессии {session_id}: {e}")
             return False
 
-    async def send_system_prompt(self, session_id: str) -> bool:
-        """Отправляет системный промпт в указанную сессию."""
+    async def send_system_prompt(self, session_id: str) -> Optional[str]:
         if not self.is_operational:
             logger.error("LLMClient не готов к работе, системный промпт не может быть отправлен.")
-            return False
+            return None
 
         chat_session = self.chat_sessions.get(session_id)
         if not chat_session:
             logger.error(f"Сессия {session_id} не найдена для отправки системного промпта.")
-            return False
+            return None
 
         if not self.system_prompt:
             logger.error("Системный промпт не загружен.")
-            return False
+            return None
 
         try:
+            # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+            # Логируем полный текст системного промпта перед отправкой
+            logger.info(f"LLM Request (session: {session_id}):\n"
+                        f"--- Start of System Prompt ---\n"
+                        f"{self.system_prompt}\n"
+                        f"--- End of System Prompt ---")
+            
             response_text = await self._retry_send_message(chat_session, self.system_prompt)
             
             if response_text:
-                logger.info(f"Системный промпт успешно отправлен для сессии {session_id}")
-                return response_text # Возвращаем текст ответа
+                # Логируем ответ
+                logger.info(f"LLM Response (session: {session_id}): {response_text}")
+                return response_text
             else:
                 logger.error(f"LLM вернул пустой ответ на системный промпт для сессии {session_id}.")
                 return None
         except Exception as e:
-            logger.error(f"Не удалось отправить системный промпт для сессии {session_id}.")
-            return False
+            logger.error(f"Не удалось отправить системный промпт для сессии {session_id}: {e}")
+            return None
 
     async def send_message(self, session_id: str, user_input: str, png_path: Optional[str] = None) -> Optional[str]:
-        """
-        Отправляет сообщение пользователя (и опционально изображение) в сессию и возвращает ответ LLM.
-        При этом запрос и ответ логируются в llm_client.log.
-        """
         if not self.is_operational:
             logger.error("LLMClient не готов к работе, сообщение не может быть отправлено.")
             return None
@@ -280,12 +277,37 @@ class LLMClient:
             return None
 
         try:
-            # Логирование запроса к LLM
-            logger.info(f"LLM Request (session: {session_id}): текст='{user_input}', png_path='{png_path}'")
+            # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+            # Формируем подробное лог-сообщение для запроса
+            log_request_details = f"LLM Request (session: {session_id}):"
+            
+            # Пытаемся красиво отформатировать JSON, если это он
+            if user_input:
+                try:
+                    parsed_json = json.loads(user_input)
+                    pretty_json = json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                    log_request_details += (f"\n--- Start of Text Payload (JSON) ---\n"
+                                            f"{pretty_json}\n"
+                                            f"--- End of Text Payload ---")
+                except json.JSONDecodeError:
+                    # Если не JSON, логируем как обычный текст
+                    log_request_details += (f"\n--- Start of Text Payload (String) ---\n"
+                                            f"{user_input}\n"
+                                            f"--- End of Text Payload ---")
+            
+            # Добавляем информацию об изображении, если оно есть
+            if png_path:
+                if os.path.exists(png_path):
+                    log_request_details += f"\n- Image Payload: {png_path} (exists)"
+                else:
+                    log_request_details += f"\n- Image Payload: {png_path} (NOT FOUND!)"
+
+            # Записываем всё в лог
+            logger.info(log_request_details)
+
             content_parts = []
             if user_input:
                 content_parts.append(user_input)
-                logger.info(f"Подготовка к отправке: текст '{user_input[:50]}...'")
 
             if png_path:
                 if os.path.exists(png_path) and os.path.isfile(png_path):
@@ -293,7 +315,6 @@ class LLMClient:
                         with open(png_path, "rb") as f:
                             png_data = f.read()
                         content_parts.append(genai.types.Part.from_data(data=png_data, mime_type="image/png"))
-                        logger.info(f"Изображение из {png_path} добавлено к сообщению.")
                     except Exception as img_e:
                         logger.error(f"Ошибка чтения или добавления изображения из {png_path}: {img_e}")
                 else:
@@ -303,9 +324,9 @@ class LLMClient:
                 logger.error("Нет контента (ни текста, ни изображения) для отправки.")
                 return None
 
-            # Отправка запроса и получение ответа от LLM
             answer_text = await self._retry_send_message(chat_session, content_parts)
-            # Логирование ответа от LLM
+            
+            # Логируем ответ
             logger.info(f"LLM Response (session: {session_id}): {answer_text}")
             return answer_text
 
@@ -314,7 +335,6 @@ class LLMClient:
             return None
 
     def set_model(self, model_name: str) -> bool:
-        """Изменяет активную модель LLM."""
         if not self.is_operational:
             logger.error("LLMClient не был успешно инициализирован, смена модели невозможна.")
             return False

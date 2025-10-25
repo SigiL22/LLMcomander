@@ -3,6 +3,7 @@
 import logging
 import json
 import asyncio
+from collections import Counter # <<< ДОБАВЛЯЕМ ИМПОРТ
 
 # Импортируем модули из основного потока
 # Предполагается, что эти модули доступны
@@ -32,11 +33,28 @@ def filter_data_for_llm(full_arma_data: dict, side: str, group_names: list = Non
         groups_to_process = [g for g in groups_to_process if g.get("n") in group_names]
 
     for group in groups_to_process:
+       # 1. Собираем список ВСЕГО оружия (основного и вторичного)
+        all_weapons = []
+        for unit in group.get("u", []):
+            primary = unit.get("pw")
+            secondary = unit.get("sw")
+            if primary:
+                all_weapons.append(primary)
+            if secondary:
+                all_weapons.append(secondary)
+        
+        # 2. Считаем количество каждого типа оружия
+        weapon_summary = Counter(all_weapons)
+        
+        # 3. Собираем итоговый объект группы.
+        #    weapon_summary уже является словарем {'РПГ-7': 1, 'АК-74М': 5},
+        #    поэтому дополнительное форматирование не нужно.
         filtered_group = {
             "n": group.get("n"),
             "p": group.get("p"),
             "c": group.get("c"),
-            "u": [{"pw": u.get("pw", "")} for u in group.get("u", [])],
+            "co": len(group.get("u", [])),
+            "u_summary": dict(weapon_summary), # Преобразуем Counter в обычный dict
             "v": [
                 {
                     "id": v.get("id"),
@@ -47,6 +65,7 @@ def filter_data_for_llm(full_arma_data: dict, side: str, group_names: list = Non
                 for v in group.get("v", [])
             ]
         }
+        
         filtered_groups.append(filtered_group)
         
     return filtered_groups

@@ -1,7 +1,8 @@
 (function() {
   // Переменные для хранения данных миссии
   window.missionSettings = window.missionSettings || {
-    updateInterval: 60, // По умолчанию 60 секунд
+    updateInterval: 30, // По умолчанию 60 секунд
+	rollCallInterval: 5, // <<< НОВОЕ ПОЛЕ, в минутах
     llmSide: null,      // Сторона LLM
     preset: null,       // Предустановка (сторона или группа)
     displaySide: null,  // Отображаемая сторона
@@ -10,10 +11,23 @@
       if (newArmaData && newArmaData.sides) {
         // Простое сравнение, чтобы не перерисовывать лишний раз
         if (JSON.stringify(sidesData) !== JSON.stringify(newArmaData.sides)) {
-          console.log("MissionSettings: Получены обновленные данные о сторонах.");
+         // console.log("MissionSettings: Получены обновленные данные о сторонах.");
           sidesData = newArmaData.sides;
         }
       }
+    },
+    handleStartMission: function() {
+      console.log("MissionSettings: Получена команда start_mission. Сброс настроек.");
+      this.llmSide = null;
+      this.preset = null;
+      // Сохраняем сброшенные настройки
+      saveSettings();
+      // Уведомляем сервер, что выбор стороны сброшен
+      fetch('/set_llm_side', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ side: "" })
+      });
     }
   };
   let sidesData = {};   // Данные о сторонах и группах
@@ -120,6 +134,26 @@
     intervalInput.style.verticalAlign = "middle";
     modal.appendChild(intervalLabel);
     modal.appendChild(intervalInput);
+    modal.appendChild(document.createElement('br'));
+
+    // --- НОВЫЙ БЛОК: ИНТЕРВАЛ ПЕРЕКЛИЧКИ ---
+    const rollCallLabel = document.createElement('label');
+    rollCallLabel.innerText = "Перекличка LLM (мин):";
+    rollCallLabel.style.width = "180px";
+    rollCallLabel.style.display = "inline-block";
+    rollCallLabel.style.marginBottom = "5px";
+    rollCallLabel.style.verticalAlign = "middle";
+    const rollCallInput = document.createElement('input');
+    rollCallInput.type = "number";
+    rollCallInput.id = "rollCallInterval";
+    rollCallInput.min = "1";
+    rollCallInput.max = "60";
+    rollCallInput.value = window.missionSettings.rollCallInterval;
+    rollCallInput.style.width = "80px";
+    rollCallInput.style.marginBottom = "8px";
+    rollCallInput.style.verticalAlign = "middle";
+    modal.appendChild(rollCallLabel);
+    modal.appendChild(rollCallInput);
     modal.appendChild(document.createElement('br'));
 
     // Сторона LLM
@@ -312,6 +346,10 @@
       window.missionSettings.updateInterval = Math.min(Math.max(parseInt(intervalInput.value) || 60, 1), 60);
       intervalInput.value = window.missionSettings.updateInterval;
     });
+    rollCallInput.addEventListener('change', () => {
+      window.missionSettings.rollCallInterval = Math.max(parseInt(rollCallInput.value) || 5, 1);
+      rollCallInput.value = window.missionSettings.rollCallInterval;
+    });
     sideSelect.addEventListener('change', () => {
             const newSide = sideSelect.value;
       window.missionSettings.llmSide = newSide;
@@ -326,6 +364,21 @@
       .then(result => {
         if (result.status === "success") {
           console.log(`Сервер подтвердил выбор стороны LLM: ${result.side || 'не выбрана'}`);
+          if (newSide) {
+            fetch('/initiate_llm_start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ side: newSide })
+            })
+            .then(initResp => initResp.json())
+            .then(initResult => {
+              if (initResult.status === "success") {
+                console.log("Сервер начал процесс инициализации LLM (промпт, маркеры, силы).");
+              } else {
+                console.error("Ошибка инициализации LLM на сервере:", initResult.message);
+              }
+            });
+          }
         } else {
           console.error("Ошибка установки стороны LLM на сервере:", result);
         }
@@ -418,6 +471,24 @@
       }
     })
     .catch(err => console.error("Ошибка установки интервала:", err));
+	
+    const rollCallIntervalMins = Math.max(parseInt(document.getElementById('rollCallInterval').value) || 5, 1);
+    fetch('/set_roll_call_interval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval: rollCallIntervalMins })
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.status === "success") {
+        console.log(`Интервал переклички установлен: ${result.interval} мин`);
+        window.missionSettings.rollCallInterval = result.interval;
+        saveSettings(); // Сохраняем обе настройки
+      } else {
+        console.error("Ошибка установки интервала переклички:", result);
+      }
+    })
+    .catch(err => console.error("Ошибка установки интервала переклички:", err));
   }
 
   // Инициализация

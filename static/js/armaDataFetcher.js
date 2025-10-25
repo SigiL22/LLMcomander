@@ -25,7 +25,12 @@ function setupReportsStream() {
     reportSource.onmessage = function(event) {
         const report = JSON.parse(event.data);
         console.log("ТОЧКА 3: Получен объект report по SSE:", report);
-
+		
+        if (report.command === "start_mission") {
+          if (window.missionSettings && typeof window.missionSettings.handleStartMission === 'function') {
+            window.missionSettings.handleStartMission();
+          }
+        }
 		if (report.t === "llm_log" && window.llmChat) {
             // --- ДОБАВЬТЕ ЭТОТ ЛОГ ---
             console.log("Обработка как llm_log");
