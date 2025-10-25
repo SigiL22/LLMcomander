@@ -121,6 +121,14 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
     var unitLayerInstance = new UnitLayer();
     unitLayerInstance.addTo(offscreenMap);
     console.log("[captureMapArea] UnitLayer добавлен.");
+	
+    if (window.unitLayer && window.unitLayer._lastData) {
+      console.log("[captureMapArea] Копирование актуальных данных в offscreen UnitLayer...");
+      unitLayerInstance.updateData(window.unitLayer._lastData, []); // Передаем последние данные, отчеты здесь не нужны
+      console.log("[captureMapArea] Данные для UnitLayer скопированы.");
+    } else {
+      console.warn("[captureMapArea] Не найдены данные в основном unitLayer для копирования.");
+    }
 
     // Принудительная перерисовка (если соответствующие методы определены)
     if (typeof gridLayerInstance._redraw === "function") {
@@ -143,7 +151,29 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
       console.log("[captureMapArea] Тайлы загружены. Дополнительное ожидание для рендеринга...");
       setTimeout(() => {
         console.log("[captureMapArea] Запуск html2canvas для offscreen-контейнера.");
-        html2canvas(hiddenContainer).then(canvas => {
+		html2canvas(hiddenContainer, {
+		  useCORS: true, // Важно для загрузки тайлов с другого домена, если потребуется
+		  onclone: (clonedDoc) => {
+			// onclone вызывается на клонированной копии DOM перед рендерингом
+			const hiddenMapElement = clonedDoc.querySelector('.leaflet-container');
+			if (!hiddenMapElement) return;
+
+			// Находим панель с тайлами и панель с оверлеями (маркеры, сетка)
+			const tilePane = hiddenMapElement.querySelector('.leaflet-tile-pane');
+			const overlayPane = hiddenMapElement.querySelector('.leaflet-overlay-pane');
+
+			if (tilePane && overlayPane) {
+			  console.log("[captureMapArea | onclone] Найдены панели тайлов и оверлеев. Попытка перемещения...");
+			  // Это ключевой трюк: мы делаем панель с тайлами дочерним элементом
+			  // панели с оверлеями. Это помогает html2canvas правильно их "увидеть".
+			  overlayPane.appendChild(tilePane);
+			  // Сбрасываем CSS-трансформации, которые могут мешать html2canvas
+			  tilePane.style.transform = 'none';
+			} else {
+			  console.warn("[captureMapArea | onclone] Не удалось найти панели тайлов или оверлеев.");
+			}
+		  }
+		}).then(canvas => {
           const mapImage = canvas.toDataURL("image/png");
           console.log("[captureMapArea] Снимок карты получен.");
 
@@ -286,7 +316,7 @@ function captureMapArea(targetCellX, targetCellY, regionSize, showCellLabels, si
           document.body.removeChild(hiddenContainer);
           reject(err);
         });
-      }, 500);
+      }, 2000);
     });
 
     // Если тайлы не загрузятся за 10 секунд, возвращаем ошибку

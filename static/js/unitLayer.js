@@ -308,17 +308,18 @@ var UnitLayer = L.Layer.extend({
                 const markerSide = armaDisplaySide === "EAST" ? "BLUFOR" : "OPFOR";
                 if (report.t === "enemy_detected") {
                     const groupId = report.ge || "unknown";
+                    const unitCount = report.ce || '?'; // Используем '?' если количество неизвестно
                     const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
                     const enemyIcon = unitIcons[markerSide].infantry;
                     const enemyTooltip = `
-                        <b>${groupId}</b><br>
+                        <b>Обнаружена пехота</b><br> 
                         Сторона: ${enemySide}<br>
-                        Юнитов: ${report.ce}<br>
-                        Точность: ${report.acc} м
+                        Количество: ~${unitCount}<br>
+                        Точность доклада: ${report.acc} м
                     `;
                     const enemyMarker = L.marker(enemyLatLng, { 
                         icon: enemyIcon,
-                        data: { side: enemySide, group: groupId }
+                        data: { side: enemySide, group: groupId } // group ID оставляем во внутренних данных
                     }).addTo(this._reportGroupLayer);
                     enemyMarker.bindTooltip(enemyTooltip, { 
                         direction: 'top', 
@@ -328,8 +329,8 @@ var UnitLayer = L.Layer.extend({
 
                     L.marker(enemyLatLng, {
                         icon: L.divIcon({
-                            html: `<div class="group-label">${groupId} (${report.ce})</div>`,
-                            className: 'label-marker',
+                            html: `<div class="group-label">(${unitCount})</div>`,
+                            className: 'label-marker enemy-report', // Добавим класс для возможной стилизации
                             iconSize: [100, 20],
                             iconAnchor: [50, -15]
                         })
