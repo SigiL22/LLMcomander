@@ -36,7 +36,7 @@ var UnitLayer = L.Layer.extend({
         this._lastData = null;
         this.waypointMode = false;
         this.savedReports = JSON.parse(localStorage.getItem('savedReports')) || {};
-        this.startMissionProcessed = false; // Флаг обработки start_mission
+        
     },
 
     onAdd: function(map) {
@@ -62,16 +62,22 @@ var UnitLayer = L.Layer.extend({
     },
 
     processReports: function(reports) {
-        if (!reports || reports.length === 0) return;
+        if (!reports || reports.length === 0) {
+            this.savedReports = {};
+            localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
+            this._reportGroupLayer.clearLayers();
+            this._reportVehicleLayer.clearLayers();
+            return;
+        }
         for (const report of reports) {
-            if (report.command === "start_mission" && !this.startMissionProcessed) {
+            if (report.command === "start_mission") { 
                 this.savedReports = {};
                 localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
-                this.startMissionProcessed = true;
-                this._reportGroupLayer.clearLayers(); // Очищаем слой пехоты
-                this._reportVehicleLayer.clearLayers(); // Очищаем слой техники
+                // this.startMissionProcessed = true; // <-- Удаляем эту строку
+                this._reportGroupLayer.clearLayers();
+                this._reportVehicleLayer.clearLayers();
                 console.log("Получена команда start_mission, сохраненные репорты и маркеры очищены");
-                return; // Прерываем обработку
+                return; // Прерываем дальнейшую обработку этого пакета
             } else if (report.t === "enemy_detected") {
                 const groupId = report.ge || "unknown";
                 this.savedReports[groupId] = report;

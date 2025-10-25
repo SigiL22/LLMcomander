@@ -130,6 +130,13 @@
   createChatWindow();
   
   window.llmChat = {
-    addMessage: addMessage
+    addMessage: addMessage,
+    clearChat: function() {
+      const messagesDiv = document.getElementById('llmMessages');
+      if (messagesDiv) {
+        messagesDiv.innerHTML = "";
+        console.log("Окно чата LLM очищено.");
+      }
+    }
   };
 })();

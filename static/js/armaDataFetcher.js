@@ -27,29 +27,38 @@ function setupReportsStream() {
         console.log("ТОЧКА 3: Получен объект report по SSE:", report);
 		
         if (report.command === "start_mission") {
-          if (window.missionSettings && typeof window.missionSettings.handleStartMission === 'function') {
-            window.missionSettings.handleStartMission();
-          }
-        }
-		if (report.t === "llm_log" && window.llmChat) {
-            // --- ДОБАВЬТЕ ЭТОТ ЛОГ ---
-            console.log("Обработка как llm_log");
-            window.llmChat.addMessage(`[СЕРВЕР]: ${report.message}`);
-        }
-		else if (report.t === "llm_response" && window.llmChat) {
-            // --- ДОБАВЬТЕ ЭТОТ ЛОГ ---
-            console.log("Обработка как llm_response");
-            let responseText = report.message;
-            try {
-                const jsonObject = JSON.parse(responseText);
-                responseText = JSON.stringify(jsonObject, null, 2);
-            } catch (e) {
-                // ...
+            console.log("Получена команда start_mission. Очистка состояния клиента...");
+            reports = []; // Очищаем массив докладов
+            if (window.llmChat && typeof window.llmChat.clearChat === 'function') {
+                window.llmChat.clearChat(); // Очищаем окно чата
             }
-            window.llmChat.addMessage(`[LLM]:\n${responseText}`);
+            if (window.missionSettings && typeof window.missionSettings.handleStartMission === 'function') {
+                window.missionSettings.handleStartMission();
+            }
+            // Вызываем updateReports с пустым массивом, чтобы немедленно стереть маркеры с карты
+            window.unitLayer.updateReports([]);
+        } 
+        // --- НАЧАЛО ИЗМЕНЕНИЙ ---
+        // Обрабатываем все остальные сообщения
+        else {
+            if (report.t === "llm_log" && window.llmChat) {
+                console.log("Обработка как llm_log");
+                window.llmChat.addMessage(`[СЕРВЕР]: ${report.message}`);
+            } else if (report.t === "llm_response" && window.llmChat) {
+                console.log("Обработка как llm_response");
+                let responseText = report.message;
+                try {
+                    const jsonObject = JSON.parse(responseText);
+                    responseText = JSON.stringify(jsonObject, null, 2);
+                } catch (e) {
+                    // ...
+                }
+                window.llmChat.addMessage(`[LLM]:\n${responseText}`);
+            }
+            // Добавляем в массив только обычные репорты, а не команду start_mission
+            reports.push(report);
+            window.unitLayer.updateReports(reports);
         }
-        reports.push(report);
-        window.unitLayer.updateReports(reports);
     };
     reportSource.onerror = function() {
         console.error("Ошибка соединения с сервером SSE для докладов");

@@ -214,14 +214,15 @@ class LLMClient:
             return False
 
         if session_id in self.chat_sessions:
-            logger.warning(f"Сессия {session_id} уже существует.")
-            return True
+            # Логируем, что сессия будет пересоздана
+            logger.warning(f"Сессия {session_id} уже существует. Пересоздание для сброса истории...")
 
         try:
-            logger.info(f"Создание chat_session для {session_id}")
+            logger.info(f"Создание/пересоздание chat_session для {session_id}")
+            # При каждом вызове создается новая сессия с пустой историей
             chat_session = self.model.start_chat(history=[])
             self.chat_sessions[session_id] = chat_session
-            logger.info(f"Сессия {session_id} успешно создана.")
+            logger.info(f"Сессия {session_id} успешно создана/пересоздана.")
             return True
         except Exception as e:
             logger.exception(f"Ошибка создания сессии {session_id}: {e}")

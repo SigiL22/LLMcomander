@@ -791,7 +791,10 @@ def set_llm_side():
     if new_side == "":
         llm_assigned_side = None
         system_prompt_sent = False # Сбрасываем флаг, если выбор стороны снят
-        logger.info("Выбор стороны для LLM снят, флаг system_prompt_sent сброшен.")
+        if llm_client:
+            # Пересоздаем сессию, чтобы очистить историю чата на сервере
+            llm_client.create_session("arma_session")
+        logger.info("Выбор стороны для LLM снят, сессия LLM и флаги сброшены.")
     else:
         llm_assigned_side = new_side
         logger.info(f"Сторона для LLM установлена на: {llm_assigned_side}")
