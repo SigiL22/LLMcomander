@@ -259,52 +259,67 @@ def arma_data_stream():
     logger.info("Новое подключение к /arma_data_stream")
     def event_stream():
         last_data_str = None
-        while True:
-            if not arma_loop or not arma_loop.is_running():
-                logger.warning("SSE arma_data: Цикл Arma Connector не работает, разрыв соединения.")
-                break # Прерываем цикл SSE
+        # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+        try:
+            while True:
+                if not arma_loop or not arma_loop.is_running():
+                    logger.warning("SSE arma_data: Цикл Arma Connector не работает, разрыв соединения.")
+                    break
 
-            # Получаем данные асинхронно
-            current_data = run_async_from_sync(get_arma_data_wrapper())
-            current_data_str = json.dumps(current_data) if current_data else None
+                current_data = run_async_from_sync(get_arma_data_wrapper())
+                current_data_str = json.dumps(current_data) if current_data else None
 
-            if current_data_str != last_data_str and current_data is not None:
-                last_data_str = current_data_str
-                try:
+                if current_data_str != last_data_str and current_data is not None:
+                    last_data_str = current_data_str
+                    # `yield` может вызвать исключение при отключении клиента
                     yield f"data: {json.dumps({'status': 'success', 'data': current_data})}\n\n"
-                except Exception as e:
-                    logger.error(f"Ошибка отправки SSE arma_data: {e}")
-                    break # Разрываем соединение при ошибке
-            time.sleep(0.1)
+                
+                time.sleep(0.1)
+        # Ловим исключение, которое Flask/Waitress генерирует при отключении клиента
+        except GeneratorExit:
+            logger.info("Клиент /arma_data_stream отключился (GeneratorExit).")
+        except Exception as e:
+            # Ловим другие возможные ошибки, например BrokenPipeError
+            logger.warning(f"Ошибка в цикле arma_data_stream (вероятно, клиент отключился): {e}")
+        finally:
+            logger.info("Завершение потока для /arma_data_stream.")
+        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+            
     return Response(event_stream(), mimetype="text/event-stream")
 
 
-# --- Маршрут /reports_stream (обновлен) ---
 @app.route("/reports_stream")
 def reports_stream():
     logger.info("Новое подключение к /reports_stream")
     def event_stream():
-        global system_prompt_sent
-        while True:
-            if not arma_loop or not arma_loop.is_running(): logger.warning("SSE reports: Цикл Arma не работает."); break
-            report = None
-            try:
-                async def get_report_non_blocking(): # Хелпер для неблокирующего получения
-                    try: return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=0.05)
-                    except asyncio.TimeoutError: return None
-                    except asyncio.QueueEmpty: return None
-                report = run_async_from_sync(get_report_non_blocking()) # Получаем через мост
+        global system_prompt_sent, llm_assigned_side, llm_client
+        # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+        try:
+            while True:
+                if not arma_loop or not arma_loop.is_running(): 
+                    logger.warning("SSE reports: Цикл Arma не работает, разрыв соединения.")
+                    break
+                
+                report = None
+                
+                async def get_report_non_blocking():
+                    try: 
+                        return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=1.0) # Увеличим таймаут
+                    except (asyncio.TimeoutError, asyncio.QueueEmpty): 
+                        return None
+                
+                report = run_async_from_sync(get_report_non_blocking())
 
                 if report:
-                    log_msg_part = report.get('command', report.get('t', 'Unknown')) # Что логгировать
-                    logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {report}")
+                    # ... (вся ваша внутренняя логика обработки report остается без изменений) ...
+                    log_msg_part = report.get('command', report.get('t', 'Unknown'))
+                    logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {log_msg_part}")
                     report_type = report.get("t")
                     if report_type in ["enemy_detected", "waypoint_reached", "enemies_cleared", "vehicle_lost"] and system_prompt_sent:
                         if llm_assigned_side and system_prompt_sent and llm_client:
                             group_name = report.get("g") or report.get("ge")
                             if group_name:
                                 context = f"Event report from group '{group_name}': {report_type.upper()}. Current status of this group"
-                                # Запускаем асинхронную отправку отчета в фоне, не блокируя поток
                                 asyncio.run_coroutine_threadsafe(
                                     llm_tactical_controller.trigger_llm_report(
                                         llm_client,
@@ -314,16 +329,23 @@ def reports_stream():
                                     ),
                                     arma_loop
                                 )
-                    # Обработка start_mission
-
                     
-                    yield f"data: {json.dumps(report)}\n\n" # Отправляем клиенту
-                    # Отмечаем репорт как обработанный в async очереди
-                    #run_async_from_sync(arma_connector.mark_report_done())
+                    yield f"data: {json.dumps(report)}\n\n"
                 else:
-                    time.sleep(0.1) # Пауза, если очередь пуста
-            except Exception as e: logger.error(f"Ошибка в цикле reports_stream: {e}"); break
-        logger.warning("Цикл event_stream для /reports_stream завершен.")
+                    # Если данных нет, отправляем "keep-alive" комментарий,
+                    # чтобы быстрее обнаружить разрыв соединения
+                    yield ": keep-alive\n\n"
+                
+                # Убираем time.sleep, т.к. wait_for теперь основной механизм ожидания
+        # Ловим исключение, которое Flask/Waitress генерирует при отключении клиента
+        except GeneratorExit:
+            logger.info("Клиент /reports_stream отключился (GeneratorExit).")
+        except Exception as e:
+            logger.warning(f"Ошибка в цикле reports_stream (вероятно, клиент отключился): {e}")
+        finally:
+            logger.info("Завершение потока для /reports_stream.")
+        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+            
     return Response(event_stream(), mimetype="text/event-stream")
 
 
