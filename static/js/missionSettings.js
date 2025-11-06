@@ -155,6 +155,25 @@
     modal.appendChild(rollCallLabel);
     modal.appendChild(rollCallInput);
     modal.appendChild(document.createElement('br'));
+	
+    const batchLabel = document.createElement('label');
+    batchLabel.innerText = "Сбор докладов LLM (сек):";
+    batchLabel.style.width = "180px";
+    batchLabel.style.display = "inline-block";
+    batchLabel.style.marginBottom = "5px";
+    batchLabel.style.verticalAlign = "middle";
+    const batchInput = document.createElement('input');
+    batchInput.type = "number";
+    batchInput.id = "llmBatchInterval";
+    batchInput.min = "1";
+    batchInput.max = "60";
+    batchInput.value = window.missionSettings.llmBatchInterval;
+    batchInput.style.width = "80px";
+    batchInput.style.marginBottom = "8px";
+    batchInput.style.verticalAlign = "middle";
+    modal.appendChild(batchLabel);
+    modal.appendChild(batchInput);
+    modal.appendChild(document.createElement('br'));
 
     // Сторона LLM
     const sideLabel = document.createElement('label');
@@ -350,6 +369,10 @@
       window.missionSettings.rollCallInterval = Math.max(parseInt(rollCallInput.value) || 5, 1);
       rollCallInput.value = window.missionSettings.rollCallInterval;
     });
+    batchInput.addEventListener('change', () => {
+      window.missionSettings.llmBatchInterval = Math.max(parseInt(batchInput.value) || 10, 1);
+      batchInput.value = window.missionSettings.llmBatchInterval;
+    });
     sideSelect.addEventListener('change', () => {
             const newSide = sideSelect.value;
       window.missionSettings.llmSide = newSide;
@@ -489,8 +512,27 @@
       }
     })
     .catch(err => console.error("Ошибка установки интервала переклички:", err));
+	
+    const llmBatchIntervalSecs = Math.max(parseInt(document.getElementById('llmBatchInterval').value) || 10, 1);
+    fetch('/set_llm_batch_interval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval: llmBatchIntervalSecs })
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.status === "success") {
+        console.log(`Интервал сбора докладов установлен: ${result.interval} сек`);
+        window.missionSettings.llmBatchInterval = result.interval;
+        saveSettings(); 
+      } else {
+        console.error("Ошибка установки интервала сбора докладов:", result);
+      }
+    })
+    .catch(err => console.error("Ошибка установки интервала сбора докладов:", err));
   }
 
+	
   // Инициализация
   loadSettings();
   createMissionSettingsToolbar();

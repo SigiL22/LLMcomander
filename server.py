@@ -42,6 +42,20 @@ if not logger.handlers:
 logger.info("=" * 10 + " Server Start " + "=" * 10)
 # --- КОНЕЦ НАСТРОЙКИ ЛОГИРОВАНИЯ ---
 
+def normalize_side(side_str: str) -> str:
+    """
+    Приводит различные варианты названий сторон в Arma 3 к единому стандарту (EAST, WEST, GUER, CIV).
+    Используется для корректного сравнения сторон.
+    """
+    if not isinstance(side_str, str):
+        return ""
+    s = side_str.upper().strip()
+    if s in ["EAST", "OPFOR", "RUS"]: return "EAST"
+    if s in ["WEST", "BLUFOR", "USA"]: return "WEST"
+    if s in ["GUER", "INDEPENDENT", "RESISTANCE", "IND"]: return "GUER"
+    if s in ["CIV", "CIVILIAN"]: return "CIV"
+    return s
+
 # --- Константы и создание Flask app (без изменений) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
@@ -69,6 +83,10 @@ roll_call_interval_seconds = 300 # По умолчанию 5 минут
 roll_call_thread = None
 roll_call_running = False
 roll_call_event = threading.Event() # Используем Event для прерывания сна
+llm_report_batch_interval_seconds = 10  # Интервал сбора (сек), значение по умолчанию
+llm_report_batch = []                   # Список для накопления докладов
+batch_lock = asyncio.Lock()             # Lock для безопасного доступа к списку
+batch_timer_task: asyncio.Task | None = None # Ссылка на задачу-таймер
 
 def roll_call_loop():
     global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client, roll_call_interval_seconds
@@ -234,6 +252,63 @@ except Exception as e:
 # --- ОПРЕДЕЛЕНИЯ МАРШРУТОВ FLASK (@app.route) ---
 # Маршруты, не требующие async вызовов, остаются без изменений
 
+# --- НОВЫЙ МАРШРУТ ДЛЯ УСТАНОВКИ ИНТЕРВАЛА ---
+@app.route("/set_llm_batch_interval", methods=["POST"])
+def set_llm_batch_interval_route():
+    global llm_report_batch_interval_seconds
+    data = request.get_json()
+    try:
+        new_interval_secs = int(data["interval"])
+        if new_interval_secs < 1:
+             return jsonify({"status": "error", "message": "Интервал должен быть положительным"}), 400
+        
+        llm_report_batch_interval_seconds = new_interval_secs
+        logger.info(f"Интервал сбора докладов LLM установлен на: {new_interval_secs} сек")
+        return jsonify({"status": "success", "interval": new_interval_secs}), 200
+    except (ValueError, TypeError, KeyError):
+         return jsonify({"status": "error", "message": "Неверное значение интервала"}), 400
+    except Exception as e:
+         logger.exception(f"Ошибка в /set_llm_batch_interval: {e}")
+         return jsonify({"status": "error", "message": str(e)}), 500
+
+# 1. НОВАЯ вспомогательная асинхронная функция для таймера
+async def batch_timer_coroutine():
+    """
+    Простая корутина, которая ждет заданный интервал,
+    а затем вызывает обработчик пакета докладов.
+    """
+    global llm_report_batch_interval_seconds
+    logger.debug(f"Таймер запущен, ожидание {llm_report_batch_interval_seconds} сек...")
+    await asyncio.sleep(llm_report_batch_interval_seconds)
+    await process_and_send_llm_batch()
+
+# 2. ОБНОВЛЕННАЯ функция обработки пакета
+async def process_and_send_llm_batch():
+    """
+    Вызывается по таймеру. Собирает накопленные доклады,
+    отправляет их в контроллер и очищает пакет.
+    """
+    global llm_report_batch, batch_timer_task, llm_client, llm_assigned_side
+    
+    async with batch_lock:
+        if not llm_report_batch:
+            batch_timer_task = None
+            logger.debug("Таймер сработал, но пакет пуст. Ничего не отправляем.")
+            return
+            
+        reports_to_process = llm_report_batch[:]
+        llm_report_batch.clear()
+        # Сбрасываем задачу-таймер, чтобы можно было запустить новую
+        batch_timer_task = None
+        logger.info(f"Таймер сработал. Обработка пакета из {len(reports_to_process)} докладов.")
+
+    if llm_client and llm_assigned_side:
+        await llm_tactical_controller.trigger_llm_batch_report(
+            llm_client,
+            llm_assigned_side,
+            reports_to_process
+        )
+
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory(STATIC_DIR, filename)
@@ -292,59 +367,51 @@ def arma_data_stream():
 def reports_stream():
     logger.info("Новое подключение к /reports_stream")
     def event_stream():
-        global system_prompt_sent, llm_assigned_side, llm_client
-        # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+        global system_prompt_sent, llm_assigned_side, llm_client, batch_timer_task
         try:
             while True:
-                if not arma_loop or not arma_loop.is_running(): 
-                    logger.warning("SSE reports: Цикл Arma не работает, разрыв соединения.")
-                    break
-                
-                report = None
-                
+                # --- НАЧАЛО ИСПРАВЛЕНИЙ ---
+                # Определяем недостающую асинхронную функцию прямо здесь
                 async def get_report_non_blocking():
                     try: 
-                        return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=1.0) # Увеличим таймаут
+                        # Пытаемся получить доклад из очереди с таймаутом в 1 секунду
+                        return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=1.0)
                     except (asyncio.TimeoutError, asyncio.QueueEmpty): 
+                        # Если очередь пуста или время вышло, возвращаем None
                         return None
-                
+                # --- КОНЕЦ ИСПРАВЛЕНИЙ ---
+
+                # Теперь этот вызов будет работать, так как функция определена выше
                 report = run_async_from_sync(get_report_non_blocking())
 
                 if report:
-                    # ... (вся ваша внутренняя логика обработки report остается без изменений) ...
                     log_msg_part = report.get('command', report.get('t', 'Unknown'))
                     logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {log_msg_part}")
-                    report_type = report.get("t")
-                    if report_type in ["enemy_detected", "waypoint_reached", "enemies_cleared", "vehicle_lost"] and system_prompt_sent:
-                        if llm_assigned_side and system_prompt_sent and llm_client:
-                            group_name = report.get("g") or report.get("ge")
-                            if group_name:
-                                context = f"Event report from group '{group_name}': {report_type.upper()}. Current status of this group"
-                                asyncio.run_coroutine_threadsafe(
-                                    llm_tactical_controller.trigger_llm_report(
-                                        llm_client,
-                                        llm_assigned_side,
-                                        context_text=context,
-                                        group_names=[group_name]
-                                    ),
-                                    arma_loop
-                                )
                     
+                    report_type = report.get("t")
+                    if system_prompt_sent and llm_assigned_side and report.get("s") and \
+                       report_type and \
+                       normalize_side(report.get("s")) == normalize_side(llm_assigned_side):
+                        
+                        async def manage_batch(new_report):
+                            global batch_timer_task
+                            async with batch_lock:
+                                llm_report_batch.append(new_report)
+                                if batch_timer_task is None or batch_timer_task.done():
+                                    logger.info(f"Первый доклад в пакете. Запуск таймера.")
+                                    batch_timer_task = asyncio.create_task(batch_timer_coroutine())
+                        
+                        run_async_from_sync(manage_batch(report))
+
                     yield f"data: {json.dumps(report)}\n\n"
                 else:
-                    # Если данных нет, отправляем "keep-alive" комментарий,
-                    # чтобы быстрее обнаружить разрыв соединения
                     yield ": keep-alive\n\n"
-                
-                # Убираем time.sleep, т.к. wait_for теперь основной механизм ожидания
-        # Ловим исключение, которое Flask/Waitress генерирует при отключении клиента
         except GeneratorExit:
             logger.info("Клиент /reports_stream отключился (GeneratorExit).")
         except Exception as e:
             logger.warning(f"Ошибка в цикле reports_stream (вероятно, клиент отключился): {e}")
         finally:
             logger.info("Завершение потока для /reports_stream.")
-        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
             
     return Response(event_stream(), mimetype="text/event-stream")
 
