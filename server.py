@@ -79,6 +79,8 @@ system_prompt_sent = False
 arma_loop: asyncio.AbstractEventLoop | None = None # Цикл событий для arma_connector
 arma_thread: threading.Thread | None = None      # Поток, в котором работает arma_loop
 llm_assigned_side: str | None = None # Сторона, назначенная LLM
+llm_enemy_side: str | None = None    # <<< ДОБАВИТЬ ЭТУ ПЕРЕМЕННУЮ
+last_auto_config_time = 0 # <<< ДОБАВИТЬ ЭТУ ПЕРЕМЕННУЮ
 roll_call_interval_seconds = 300 # По умолчанию 5 минут
 roll_call_thread = None
 roll_call_running = False
@@ -367,28 +369,99 @@ def arma_data_stream():
 def reports_stream():
     logger.info("Новое подключение к /reports_stream")
     def event_stream():
-        global system_prompt_sent, llm_assigned_side, llm_client, batch_timer_task
+        # Добавляем llm_enemy_side в global
+        global system_prompt_sent, llm_assigned_side, llm_enemy_side, llm_client, batch_timer_task
         try:
             while True:
-                # --- НАЧАЛО ИСПРАВЛЕНИЙ ---
-                # Определяем недостающую асинхронную функцию прямо здесь
                 async def get_report_non_blocking():
                     try: 
-                        # Пытаемся получить доклад из очереди с таймаутом в 1 секунду
                         return await asyncio.wait_for(arma_connector.reports_queue.get(), timeout=1.0)
                     except (asyncio.TimeoutError, asyncio.QueueEmpty): 
-                        # Если очередь пуста или время вышло, возвращаем None
                         return None
-                # --- КОНЕЦ ИСПРАВЛЕНИЙ ---
 
-                # Теперь этот вызов будет работать, так как функция определена выше
                 report = run_async_from_sync(get_report_non_blocking())
 
                 if report:
+                    # --- НАЧАЛО ИЗМЕНЕНИЙ: Обработка start_mission и автозапуск ---
+                    if report.get("command") == "start_mission":
+                        # 1. Пытаемся получить конфиг из верхнего уровня (как планировали)
+                        config_str = report.get("config", "")
+                        
+                        # 2. FALLBACK: Если наверху пусто, ищем внутри массива маркеров
+                        if not config_str and "markers" in report:
+                            logger.info("Конфиг не найден в корне, поиск внутри маркеров...")
+                            for m in report["markers"]:
+                                text = m.get("text", "")
+                                if not text: continue
+                                # Проверяем наличие ключевых флагов в тексте маркера
+                                text_lower = text.lower()
+                                if "l-" in text_lower and "a-" in text_lower:
+                                    config_str = text
+                                    logger.info(f"Конфиг найден внутри маркера '{m.get('name')}': {config_str}")
+                                    break
+
+                        new_llm_side = None
+                        new_enemy_side = None
+                        
+                        if config_str:
+                            try:
+                                # Пример строки: "a-opfor,d-blufor,l-opfor"
+                                parts = config_str.split(',')
+                                config_map = {}
+                                for part in parts:
+                                    if '-' in part:
+                                        key, val = part.split('-', 1)
+                                        config_map[key.strip().lower()] = val.strip().upper()
+                                
+                                # Если указана сторона LLM (l-)
+                                if 'l' in config_map:
+                                    raw_llm_side = config_map['l']
+                                    new_llm_side = normalize_side(raw_llm_side)
+                                    
+                                    # Логика определения врага:
+                                    if 'a' in config_map and normalize_side(config_map['a']) == new_llm_side:
+                                        new_enemy_side = normalize_side(config_map.get('d', ''))
+                                    elif 'd' in config_map and normalize_side(config_map['d']) == new_llm_side:
+                                        new_enemy_side = normalize_side(config_map.get('a', ''))
+                                    
+                                logger.info(f"Распаршен конфиг миссии: {config_map}. LLM: {new_llm_side}, Враг: {new_enemy_side}")
+                            except Exception as e:
+                                logger.error(f"Ошибка парсинга конфига миссии '{config_str}': {e}")
+
+                        # Применяем настройки
+                        if new_llm_side:
+                            llm_assigned_side = new_llm_side
+                            llm_enemy_side = new_enemy_side
+                            
+                            global last_auto_config_time # Не забудьте добавить global в начале функции event_stream если нужно, но здесь python найдет её в module scope
+                            last_auto_config_time = time.time() 
+                            
+                            # Сбрасываем сессию LLM (очистка истории)
+                            if llm_client:
+                                llm_client.create_session("arma_session")
+                            
+                            system_prompt_sent = False
+                            
+                            # АВТОМАТИЧЕСКИЙ ЗАПУСК
+                            markers = report.get("markers", [])
+                            
+                            async def auto_start_wrapper(m):
+                                logger.info("Автозапуск инициализации LLM по конфигу миссии...")
+                                await asyncio.sleep(1) 
+                                await send_system_prompt(m)
+                                
+                            if arma_loop:
+                                asyncio.run_coroutine_threadsafe(auto_start_wrapper(markers), arma_loop)
+                        else:
+                            llm_assigned_side = None
+                            llm_enemy_side = None
+                            logger.info("Конфиг не найден или не содержит 'l-', ожидание ручного выбора стороны.")
+
                     log_msg_part = report.get('command', report.get('t', 'Unknown'))
                     logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {log_msg_part}")
                     
                     report_type = report.get("t")
+                    # Проверяем, что сторона совпадает (с учетом врага и своей стороны)
                     if system_prompt_sent and llm_assigned_side and report.get("s") and \
                        report_type and \
                        normalize_side(report.get("s")) == normalize_side(llm_assigned_side):
@@ -418,7 +491,7 @@ def reports_stream():
 
 # --- Функция send_system_prompt (принимает markers, async) ---
 async def send_system_prompt(markers: list = None):
-    global system_prompt_sent, llm_client, llm_assigned_side
+    global system_prompt_sent, llm_client, llm_assigned_side, llm_enemy_side # <<< ДОБАВЛЕН llm_enemy_side
     
     if not llm_assigned_side:
         logger.error("(async) Попытка запустить send_system_prompt без выбранной стороны LLM. Отменено.")
@@ -434,14 +507,12 @@ async def send_system_prompt(markers: list = None):
     
     if not prompt_response:
         logger.error("(async) Не удалось отправить основной системный промпт или получен пустой ответ.")
-        # Отправляем сообщение об ошибке в UI
         await arma_connector.reports_queue.put({
             "t": "llm_log",
             "message": "Ошибка: не удалось отправить системный промпт в LLM."
         })
         return False
     
-    # Отправляем сообщение об успехе в очередь
     await arma_connector.reports_queue.put({"t": "llm_log", "message": "Системный промпт успешно отправлен."})
     await llm_tactical_controller.handle_llm_response(prompt_response)
     
@@ -455,12 +526,16 @@ async def send_system_prompt(markers: list = None):
     filtered_forces = llm_tactical_controller.filter_data_for_llm(current_arma_data, llm_assigned_side)
 
     # 3. Формируем единое сообщение с маркерами и силами
+    # --- НАЧАЛО ИЗМЕНЕНИЙ: Формируем контекст с учетом сторон ---
+    context_text = f"Initial mission data. You are commanding side: {llm_assigned_side}."
+    if llm_enemy_side:
+        context_text += f" Your primary enemy is: {llm_enemy_side}."
+    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
     initial_data_payload = {}
-    context_text = "Initial mission data."
 
     if markers:
         logger.info(f"(async) Оптимизируем и добавляем данные о {len(markers)} маркерах в первоначальный отчет.")
-        
         optimized_markers = []
         for m in markers:
             marker_data = {
@@ -468,16 +543,10 @@ async def send_system_prompt(markers: list = None):
                 "p": m.get("pos"),
                 "text": m.get("text"),
             }
-            
-            # --- НОВАЯ ЛОГИКА ДЛЯ ПОЛЯ 'size' ---
             size = m.get("size")
-            # Добавляем поле 'size' только если оно существует и не является точечным (1x1)
             if size and (size[0] > 1 or size[1] > 1):
                 marker_data["size"] = size
-            # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
-
             optimized_markers.append(marker_data)
-            
         initial_data_payload["mission_markers"] = optimized_markers
     else:
         logger.warning("(async) Данные маркеров не предоставлены для первоначального отчета.")
@@ -494,12 +563,13 @@ async def send_system_prompt(markers: list = None):
             json_str = json.dumps(initial_data_payload, ensure_ascii=False)
             full_prompt = f"{context_text}\n{json_str}"
             
+            logger.info(f"(async) Отправка начальных данных. Сторона: {llm_assigned_side}, Враг: {llm_enemy_side}")
             response = await llm_client.send_message("arma_session", user_input=full_prompt)
             await llm_tactical_controller.handle_llm_response(response)
             
             await arma_connector.reports_queue.put({
                 "t": "llm_log",
-                "message": "Данные о маркерах и своих силах отправлены."
+                "message": f"Миссия инициализирована. Сторона: {llm_assigned_side}. Противник: {llm_enemy_side or 'Неизвестен'}"
             })
 
         except Exception as e:
@@ -843,23 +913,35 @@ def initiate_llm_start():
     return jsonify({"status": "success", "message": "Процесс инициализации LLM запущен."})
 
 
-@app.route("/set_llm_side", methods=["POST"])
+@app.route("/set_llm_side", methods=["GET", "POST"]) # <<< Добавлен GET
 def set_llm_side():
     """
-    Устанавливает или сбрасывает сторону, за которую играет LLM.
+    GET: Возвращает текущую установленную сторону LLM.
+    POST: Устанавливает или сбрасывает сторону.
     """
-    global llm_assigned_side, system_prompt_sent
+    global llm_assigned_side, system_prompt_sent, last_auto_config_time, llm_client # добавлены global
+
+    # --- НОВАЯ ЧАСТЬ: Обработка GET запроса ---
+    if request.method == "GET":
+        return jsonify({"status": "success", "side": llm_assigned_side}), 200
+    # ------------------------------------------
+
+    # Обработка POST (существующий код)
     data = request.get_json()
-    if data is None or "side" not in data: # Проверка на None
+    if data is None or "side" not in data:
         return jsonify({"status": "error", "message": "Параметр 'side' отсутствует"}), 400
     
     new_side = data.get("side")
     
     if new_side == "":
+        # Если с момента автоконфигурации прошло менее 5 секунд, игнорируем сброс
+        if time.time() - last_auto_config_time < 5:
+            logger.info(f"Игнорирование сброса стороны клиентом, так как активна автоконфигурация ({llm_assigned_side}).")
+            return jsonify({"status": "ignored", "side": llm_assigned_side}), 200
+
         llm_assigned_side = None
-        system_prompt_sent = False # Сбрасываем флаг, если выбор стороны снят
+        system_prompt_sent = False
         if llm_client:
-            # Пересоздаем сессию, чтобы очистить историю чата на сервере
             llm_client.create_session("arma_session")
         logger.info("Выбор стороны для LLM снят, сессия LLM и флаги сброшены.")
     else:
@@ -867,6 +949,8 @@ def set_llm_side():
         logger.info(f"Сторона для LLM установлена на: {llm_assigned_side}")
 
     return jsonify({"status": "success", "side": llm_assigned_side}), 200
+    
+    
 
 
 @app.route("/llm_models", methods=["GET"])

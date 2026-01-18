@@ -201,6 +201,21 @@
     modal.appendChild(sideLabel);
     modal.appendChild(sideSelect);
     modal.appendChild(document.createElement('br'));
+	
+	// Спрашиваем у сервера, какая сторона сейчас активна
+    fetch('/set_llm_side', { method: 'GET' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'success' || data.status === 'ignored') {
+          // Если сервер вернул сторону (например, "EAST"), обновляем UI и локальную переменную
+          if (data.side) {
+            console.log("Синхронизация с сервером: активная сторона LLM ->", data.side);
+            window.missionSettings.llmSide = data.side;
+            sideSelect.value = data.side;
+          }
+        }
+      })
+      .catch(err => console.error("Ошибка синхронизации стороны LLM:", err));
 
     // Отображаемая сторона
     const displaySideLabel = document.createElement('label');
