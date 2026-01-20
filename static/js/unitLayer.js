@@ -290,7 +290,51 @@ var UnitLayer = L.Layer.extend({
         });
 
         this.updateReports(reports);
+		
+        // Автозапуск LLM, когда пришли первые данные о войсках
+        if (window.missionSettings && window.missionSettings.llmSide && !window.hasCapturedInitialSnapshots) {
+            const mySideKey = window.missionSettings.llmSide; 
+            console.log(`[UnitLayer] Проверка автозапуска. Сторона: ${mySideKey}`);
+
+            // Надежный поиск данных стороны (учитывая OPFOR/EAST/WEST/BLUFOR)
+            let sideData = null;
+            const sidesObj = jsonData.sides;
+            
+            // 1. Прямое совпадение
+            if (sidesObj[mySideKey]) {
+                sideData = sidesObj[mySideKey];
+            } 
+            // 2. Перебор синонимов (если прямого нет)
+            else {
+                if ((mySideKey === "EAST" || mySideKey === "OPFOR") && (sidesObj["OPFOR"] || sidesObj["EAST"])) 
+                    sideData = sidesObj["OPFOR"] || sidesObj["EAST"];
+                
+                else if ((mySideKey === "WEST" || mySideKey === "BLUFOR") && (sidesObj["BLUFOR"] || sidesObj["WEST"])) 
+                    sideData = sidesObj["BLUFOR"] || sidesObj["WEST"];
+                
+                else if ((mySideKey === "GUER" || mySideKey === "Independent") && (sidesObj["Independent"] || sidesObj["GUER"])) 
+                    sideData = sidesObj["Independent"] || sidesObj["GUER"];
+            }
+
+            if (sideData && sideData.length > 0) {
+                console.log("[UnitLayer] Первые данные о войсках получены! Запуск авто-захвата через 2 сек...");
+                window.hasCapturedInitialSnapshots = true; 
+                
+                setTimeout(() => {
+                    if (typeof performInitialCaptureAndSend === 'function') {
+                        performInitialCaptureAndSend();
+                    } else {
+                        console.error("[UnitLayer] Функция performInitialCaptureAndSend не найдена!");
+                    }
+                }, 2000);
+            } else {
+                // Лог для отладки, если данные не найдены
+                console.log(`[UnitLayer] Данные для стороны ${mySideKey} пока не найдены или пусты. Доступные ключи:`, Object.keys(sidesObj));
+            }
+        }
+        // ---------------------------
     },
+
 
     updateReports: function(reports) {
         console.log("Получены репорты:", reports);

@@ -429,3 +429,198 @@ Consolidated tactical reports from your units. Analyze the situation and issue c
 14:18:17 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
 14:50:22 [ERROR] llm_client: Ошибка получения списка моделей: None Stream removed
 14:53:56 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+16:51:41 [INFO] llm_client: Инициализация LLMClient...
+16:51:41 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+16:51:41 [INFO] llm_client: Конфигурация Google API...
+16:51:41 [INFO] llm_client: Проверка доступности API и моделей...
+16:51:44 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+16:51:44 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+16:51:44 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+16:51:44 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+16:51:44 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+16:51:44 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+16:51:44 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+16:53:01 [INFO] llm_client: Инициализация LLMClient...
+16:53:01 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+16:53:01 [INFO] llm_client: Конфигурация Google API...
+16:53:01 [INFO] llm_client: Проверка доступности API и моделей...
+16:53:03 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+16:53:03 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+16:53:03 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+16:53:03 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+16:53:03 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+16:53:03 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+16:53:03 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+16:53:56 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+16:54:30 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+16:54:30 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+16:54:30 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+16:54:30 [INFO] llm_client: LLM Request (session: arma_session). Text length: 983. Images: 0
+16:54:42 [INFO] llm_client: LLM Response (session: arma_session): Принято. Давай разберем текущую ситуацию. Как командир стороны EAST, я вижу перед собой классическую...
+16:58:04 [INFO] llm_client: LLM Request (session: arma_session). Text length: 402. Images: 0
+16:58:13 [INFO] llm_client: LLM Response (session: arma_session): Принято. На связи штаб. 
+
+**Текущий статус сил (Перекличка):**
+Все три единицы (Альфа 1-1, 1-2, 1-3)...
+17:01:03 [INFO] llm_client: Инициализация LLMClient...
+17:01:03 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+17:01:03 [INFO] llm_client: Конфигурация Google API...
+17:01:03 [INFO] llm_client: Проверка доступности API и моделей...
+17:01:05 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:01:05 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+17:01:05 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+17:01:05 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+17:01:05 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+17:01:05 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:01:05 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:01:18 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:01:23 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+17:01:23 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:01:23 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:11:18 [ERROR] llm_client: Ошибка получения списка моделей: None Stream removed
+17:11:28 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:11:43 [INFO] llm_client: Инициализация LLMClient...
+17:11:43 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+17:11:43 [INFO] llm_client: Конфигурация Google API...
+17:11:43 [INFO] llm_client: Проверка доступности API и моделей...
+17:11:45 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:11:45 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+17:11:45 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+17:11:45 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+17:11:45 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+17:11:45 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:11:45 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:11:50 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:12:12 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+17:12:12 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:12:12 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:15:32 [INFO] llm_client: Инициализация LLMClient...
+17:15:32 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+17:15:32 [INFO] llm_client: Конфигурация Google API...
+17:15:32 [INFO] llm_client: Проверка доступности API и моделей...
+17:15:34 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:15:34 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+17:15:34 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+17:15:34 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+17:15:34 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+17:15:34 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:15:34 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:16:07 [INFO] llm_client: Инициализация LLMClient...
+17:16:07 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+17:16:07 [INFO] llm_client: Конфигурация Google API...
+17:16:07 [INFO] llm_client: Проверка доступности API и моделей...
+17:16:08 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:16:08 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+17:16:08 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+17:16:08 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+17:16:08 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+17:16:08 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:16:08 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:16:21 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:16:26 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+17:16:26 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:16:26 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:29:48 [INFO] llm_client: Инициализация LLMClient...
+17:29:48 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+17:29:48 [INFO] llm_client: Конфигурация Google API...
+17:29:48 [INFO] llm_client: Проверка доступности API и моделей...
+17:29:49 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:29:49 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+17:29:49 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+17:29:49 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+17:29:49 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+17:29:49 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:29:49 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:30:00 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:30:05 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+17:30:05 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:30:05 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:30:25 [ERROR] llm_client: Ошибка чтения изображения snapshots\snap_attack_tac_1768912219190.png: module 'google.generativeai.types' has no attribute 'Part'
+17:30:25 [ERROR] llm_client: Ошибка чтения изображения snapshots\snap_attack_strat_1768912225454.png: module 'google.generativeai.types' has no attribute 'Part'
+17:30:25 [INFO] llm_client: LLM Request (session: arma_session). Text length: 982. Images: 2
+17:30:38 [INFO] llm_client: LLM Response (session: arma_session): Принято, штаб на связи. Раз уж мы просто общаемся в контексте командования, давай проанализируем тек...
+17:34:50 [INFO] llm_client: LLM Request (session: arma_session). Text length: 401. Images: 0
+17:34:50 [ERROR] llm_client: Неизвестная ошибка при отправке в LLM (попытка 1): None Stream removed
+Traceback (most recent call last):
+  File "C:\LLMcomander\llm_client.py", line 191, in _retry_send_message
+    logger.debug(f"LLM отправка (попытка {attempt + 1}/{max_retries})...")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        content
+    
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\asyncio\threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\generativeai\generative_models.py", line 578, in send_message
+    response = self.model.generate_content(
+        contents=history,
+    ...<5 lines>...
+        request_options=request_options,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\generativeai\generative_models.py", line 331, in generate_content
+    response = self._client.generate_content(
+        request,
+        **request_options,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\ai\generativelanguage_v1beta\services\generative_service\client.py", line 835, in generate_content
+    response = rpc(
+        request,
+    ...<2 lines>...
+        metadata=metadata,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\gapic_v1\method.py", line 131, in __call__
+    return wrapped_func(*args, **kwargs)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_unary.py", line 293, in retry_wrapped_func
+    return retry_target(
+        target,
+    ...<3 lines>...
+        on_error=on_error,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_unary.py", line 153, in retry_target
+    _retry_error_helper(
+    ~~~~~~~~~~~~~~~~~~~^
+        exc,
+        ^^^^
+    ...<6 lines>...
+        timeout,
+        ^^^^^^^^
+    )
+    ^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_base.py", line 212, in _retry_error_helper
+    raise final_exc from source_exc
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_unary.py", line 144, in retry_target
+    result = target()
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.Unknown: None Stream removed
+17:34:50 [ERROR] llm_client: Не удалось отправить сообщение для сессии arma_session: None Stream removed
+17:39:51 [INFO] llm_client: Инициализация LLMClient...
+17:39:51 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+17:39:51 [INFO] llm_client: Конфигурация Google API...
+17:39:51 [INFO] llm_client: Проверка доступности API и моделей...
+17:39:52 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:39:52 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+17:39:53 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+17:39:53 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+17:39:53 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+17:39:53 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:39:53 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:39:56 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+17:40:01 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+17:40:01 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+17:40:01 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+17:40:21 [INFO] llm_client: Добавлено изображение (PIL): snapshots\snap_attack_tac_1768912815652.png
+17:40:21 [INFO] llm_client: Добавлено изображение (PIL): snapshots\snap_attack_strat_1768912821918.png
+17:40:21 [INFO] llm_client: LLM Request (session: arma_session). Text length: 982. Images: 2
+17:40:36 [INFO] llm_client: LLM Response (session: arma_session): Принято. Раз мы пока просто общаемся, давай разберем текущую ситуацию «на бумаге». Как командир стор...
+17:41:10 [INFO] llm_client: LLM Request (session: arma_session). Text length: 54. Images: 0
+17:41:19 [INFO] llm_client: LLM Response (session: arma_session): Да, я вижу оба изображения. Они отлично дополняют текстовые данные.
+
+Вот что я считал с твоих карт:
+...
+17:42:20 [INFO] llm_client: LLM Request (session: arma_session). Text length: 61. Images: 0
+17:42:30 [INFO] llm_client: LLM Response (session: arma_session): Да, JSON пришел и я его полностью обработал. Именно на его основе я сделал выводы в первом сообщении...

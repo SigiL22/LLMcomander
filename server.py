@@ -89,6 +89,7 @@ llm_report_batch_interval_seconds = 10  # Интервал сбора (сек), 
 llm_report_batch = []                   # Список для накопления докладов
 batch_lock = asyncio.Lock()             # Lock для безопасного доступа к списку
 batch_timer_task: asyncio.Task | None = None # Ссылка на задачу-таймер
+current_mission_snapshots = [] # Список путей к актуальным снимкам
 
 def roll_call_loop():
     global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client, roll_call_interval_seconds
@@ -398,8 +399,9 @@ def reports_stream():
                                 if "l-" in text_lower and "a-" in text_lower:
                                     config_str = text
                                     logger.info(f"Конфиг найден внутри маркера '{m.get('name')}': {config_str}")
-                                    break
-
+                                    break                                
+                                    
+                        report["config"] = config_str 
                         new_llm_side = None
                         new_enemy_side = None
                         
@@ -423,7 +425,7 @@ def reports_stream():
                                         new_enemy_side = normalize_side(config_map.get('d', ''))
                                     elif 'd' in config_map and normalize_side(config_map['d']) == new_llm_side:
                                         new_enemy_side = normalize_side(config_map.get('a', ''))
-                                    
+                                  
                                 logger.info(f"Распаршен конфиг миссии: {config_map}. LLM: {new_llm_side}, Враг: {new_enemy_side}")
                             except Exception as e:
                                 logger.error(f"Ошибка парсинга конфига миссии '{config_str}': {e}")
@@ -443,23 +445,18 @@ def reports_stream():
                             system_prompt_sent = False
                             
                             # АВТОМАТИЧЕСКИЙ ЗАПУСК
-                            markers = report.get("markers", [])
+                            # Мы сохраняем сторону, но НЕ запускаем инициализацию LLM здесь.
+                            # Теперь инициализацию запускает КЛИЕНТ (JS) после того, как сделает и загрузит снимки.
                             
-                            async def auto_start_wrapper(m):
-                                logger.info("Автозапуск: Ждем данные о юнитах перед инициализацией...")
+                            # markers = report.get("markers", [])
+                            # async def auto_start_wrapper(m):
+                            #    ... 
+                            #    await send_system_prompt(m)
                                 
-                                # Ждем до 10 секунд, пока arma_data не станет доступна
-                                for _ in range(20): # 20 попыток по 0.5 сек = 10 сек
-                                    async with arma_connector.data_lock:
-                                        if arma_connector.arma_data is not None:
-                                            break
-                                    await asyncio.sleep(0.5)
-                                
-                                # Теперь, когда данные (вероятно) есть, запускаем промпт
-                                await send_system_prompt(m)
-                                
-                            if arma_loop:
-                                asyncio.run_coroutine_threadsafe(auto_start_wrapper(markers), arma_loop)
+                            # if arma_loop:
+                            #    asyncio.run_coroutine_threadsafe(auto_start_wrapper(markers), arma_loop)
+                            
+                            logger.info("Автоконфигурация стороны выполнена. Ждем снимки и команду старта от клиента.")
                         else:
                             llm_assigned_side = None
                             llm_enemy_side = None
@@ -483,7 +480,7 @@ def reports_stream():
                                     batch_timer_task = asyncio.create_task(batch_timer_coroutine())
                         
                         run_async_from_sync(manage_batch(report))
-
+                    
                     yield f"data: {json.dumps(report)}\n\n"
                 else:
                     yield ": keep-alive\n\n"
@@ -499,7 +496,8 @@ def reports_stream():
 
 # --- Функция send_system_prompt (принимает markers, async) ---
 async def send_system_prompt(markers: list = None):
-    global system_prompt_sent, llm_client, llm_assigned_side, llm_enemy_side
+    # 1. Добавляем current_mission_snapshots в global
+    global system_prompt_sent, llm_client, llm_assigned_side, llm_enemy_side, current_mission_snapshots
     
     if not llm_assigned_side:
         logger.error("ОШИБКА: Попытка инициализации без выбранной стороны LLM.")
@@ -517,9 +515,7 @@ async def send_system_prompt(markers: list = None):
 
     logger.info(f"--- НАЧАЛО ИНИЦИАЛИЗАЦИИ МИССИИ ({llm_assigned_side}) ---")
 
-    # 1. ЦИКЛ ОЖИДАНИЯ ДАННЫХ (FIX)
-    # Ждем до 5 секунд, пока arma_data не перестанет быть None
-    # Это решает проблему, когда start_mission пришел, а updateUnits еще летит по сети
+    # 1. ЦИКЛ ОЖИДАНИЯ ДАННЫХ
     logger.info("Ждем данные о войсках от Arma...")
     data_received = False
     for i in range(10): # 10 попыток по 0.5 сек = 5 секунд
@@ -553,7 +549,6 @@ async def send_system_prompt(markers: list = None):
                 "p": m.get("pos"),
                 "text": m.get("text"),
             }
-            # Добавляем размер только если он имеет значение
             size = m.get("size")
             if size and (size[0] > 1 or size[1] > 1):
                 marker_data["size"] = size
@@ -561,13 +556,10 @@ async def send_system_prompt(markers: list = None):
         initial_data_payload["mission_markers"] = optimized_markers
         logger.info(f"Добавлено маркеров: {len(optimized_markers)}")
 
-    # -- Добавляем силы (ВОТ ЗДЕСЬ ОНИ ПРИКЛЕИВАЮТСЯ) --
+    # -- Добавляем силы --
     if filtered_forces:
         initial_data_payload["your_forces"] = filtered_forces
         logger.info(f"Добавлено групп своих войск: {len(filtered_forces)}")
-        # Можно вывести в лог названия групп для проверки
-        group_names = [g.get('n') for g in filtered_forces]
-        logger.debug(f"Список групп: {group_names}")
     else:
         logger.warning(f"Данные о войсках ПУСТЫ после фильтрации для стороны {llm_assigned_side}!")
 
@@ -576,7 +568,16 @@ async def send_system_prompt(markers: list = None):
     if llm_enemy_side:
         context_header += f" Your primary enemy is: {llm_enemy_side}."
 
-    # 5. Склеиваем всё в одну строку для отправки
+    # --- НОВАЯ ЛОГИКА ДЛЯ ИЗОБРАЖЕНИЙ ---
+    images_to_send = []
+    if current_mission_snapshots:
+        logger.info(f"Прикрепляем {len(current_mission_snapshots)} снимков к запросу инициализации.")
+        images_to_send = current_mission_snapshots
+    else:
+        logger.info("Снимки карты не были загружены клиентом. Отправляем только текстовые данные.")
+    # -------------------------------------
+
+    # 5. Склеиваем всё в одну строку для отправки и ОТПРАВЛЯЕМ
     try:
         json_str = json.dumps(initial_data_payload, ensure_ascii=False)
         
@@ -585,13 +586,20 @@ async def send_system_prompt(markers: list = None):
             f"--- MISSION CONTEXT ---\n"
             f"{context_header}\n\n"        # КОНТЕКСТ СТОРОН
             f"--- MISSION DATA JSON ---\n"
-            f"{json_str}"                  # JSON С ДАННЫМИ (МАРКЕРЫ + СИЛЫ)
+            f"{json_str}"                  # JSON С ДАННЫМИ
         )
         
-        logger.info(f"Отправка ОБЪЕДИНЕННОГО запроса в LLM ({len(full_combined_prompt)} символов)...")
+        logger.info(f"Отправка ОБЪЕДИНЕННОГО запроса в LLM ({len(full_combined_prompt)} символов + {len(images_to_send)} изображений)...")
         
-        # Отправляем одним сообщением
-        response = await llm_client.send_message("arma_session", user_input=full_combined_prompt)
+        # --- ИЗМЕНЕННЫЙ ВЫЗОВ (добавлен image_paths) ---
+        response = await llm_client.send_message(
+            "arma_session", 
+            user_input=full_combined_prompt,
+            image_paths=images_to_send # Передаем список путей к картинкам
+        )
+        
+        # Очищаем список снимков после отправки, чтобы они не ушли со следующим сообщением
+        current_mission_snapshots = []
         
         # Обрабатываем ответ
         await llm_tactical_controller.handle_llm_response(response)
@@ -601,12 +609,14 @@ async def send_system_prompt(markers: list = None):
         # Пишем в чат
         await arma_connector.reports_queue.put({
             "t": "llm_log",
-            "message": f"Миссия инициализирована. Силы: {len(filtered_forces) if filtered_forces else 0} отрядов."
+            "message": f"Миссия инициализирована. Силы: {len(filtered_forces) if filtered_forces else 0} отрядов. Снимков карты: {len(images_to_send)}."
         })
         return True
 
     except Exception as e:
         logger.exception("Критическая ошибка при отправке объединенных данных в LLM.")
+        # Даже при ошибке лучше очистить список снимков, чтобы не застрять
+        current_mission_snapshots = []
         return False
 
 @app.route("/set_roll_call_interval", methods=["POST"])
@@ -899,41 +909,48 @@ def initiate_llm_start():
     global system_prompt_sent, llm_assigned_side
     data = request.get_json()
     
-    # Проверка, что сторона в запросе совпадает с сохраненной на сервере
-    if not data or data.get("side") != llm_assigned_side or not llm_assigned_side:
-        msg = "Ошибка: сторона не выбрана или не совпадает с серверной."
+    # --- ИСПРАВЛЕНИЕ: Нормализация сторон перед сравнением ---
+    client_side_raw = data.get("side") if data else ""
+    
+    # Приводим обе стороны к единому формату (EAST, WEST...)
+    normalized_client_side = normalize_side(client_side_raw)
+    normalized_server_side = normalize_side(llm_assigned_side)
+
+    # Проверка совпадения
+    if not client_side_raw or normalized_client_side != normalized_server_side or not llm_assigned_side:
+        msg = f"Ошибка: сторона не выбрана или не совпадает. Клиент: {client_side_raw} ({normalized_client_side}), Сервер: {llm_assigned_side} ({normalized_server_side})"
         logger.error(msg)
         return jsonify({"status": "error", "message": msg}), 400
+    # ---------------------------------------------------------
 
     # Проверка, чтобы не запускать инициализацию повторно
     if system_prompt_sent:
         msg = "Процесс инициализации LLM уже был запущен ранее."
         logger.warning(msg)
-        return jsonify({"status": "error", "message": msg}), 409 # 409 Conflict
+        return jsonify({"status": "error", "message": msg}), 409
 
     logger.info(f"Получен запрос на инициализацию LLM для стороны: {llm_assigned_side}. Запуск...")
     
-    # Сбрасываем флаг перед запуском
     system_prompt_sent = False
     
     async def initialization_wrapper():
-        # Ждем новые маркеры. Если они уже пришли, событие сработает мгновенно.
-        # Если нет - будем ждать до 10 секунд.
-        markers = await arma_connector.get_last_start_mission_markers_async(wait_for_new=True, timeout=10)
+        # Ждем новые маркеры (или берем последние)
+        markers = await arma_connector.get_last_start_mission_markers_async(wait_for_new=False)
+        
+        # Если маркеров нет в памяти, пробуем подождать чуть-чуть
+        if markers is None:
+             markers = await arma_connector.get_last_start_mission_markers_async(wait_for_new=True, timeout=5)
 
         if markers is None:
-            logger.error("Не удалось получить маркеры миссии для инициализации LLM. Процесс прерван.")
-            # Сообщаем пользователю об ошибке
+            logger.error("Не удалось получить маркеры миссии. Инициализация LLM прервана.")
             await arma_connector.reports_queue.put({
                 "t": "llm_log",
-                "message": "ОШИБКА: Не удалось получить маркеры от Arma. Инициализация LLM прервана."
+                "message": "ОШИБКА: Не удалось получить данные маркеров."
             })
             return
 
-        # Если маркеры получены, запускаем основной процесс
         await send_system_prompt(markers)
 
-    # Запускаем нашу обертку в фоне
     if arma_loop:
         asyncio.run_coroutine_threadsafe(
             initialization_wrapper(),
@@ -1066,6 +1083,39 @@ def llm_command():
              return jsonify({"status": "error", "message": "LLM command failed (connector loop down)"}), 500
     except Exception as e:
         logger.exception(f"Ошибка в llm_command: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+        
+@app.route("/upload_mission_snapshots", methods=["POST"])
+def upload_mission_snapshots():
+    global current_mission_snapshots
+    data = request.get_json()
+    if not data or "snapshots" not in data:
+        return jsonify({"status": "error", "message": "No snapshots data"}), 400
+    
+    saved_paths = []
+    try:
+        # Очищаем старые снимки из списка (но файлы можно оставить в папке snapshots для истории)
+        current_mission_snapshots = []
+        
+        for i, snap in enumerate(data["snapshots"]):
+            # snap: { "type": "strategic"/"tactical", "image": "base64...", "filename": "..." }
+            image_data_b64 = snap["image"].split(',')[1]
+            filename = snap.get("filename", f"snap_{i}.png")
+            
+            # Сохраняем во временную папку или snapshots
+            file_path = os.path.join(SNAPSHOTS_FOLDER, filename)
+            with open(file_path, "wb") as f:
+                f.write(base64.b64decode(image_data_b64))
+            
+            saved_paths.append(file_path)
+        
+        # Обновляем глобальную переменную
+        current_mission_snapshots = saved_paths
+        logger.info(f"Получено и сохранено {len(saved_paths)} снимков миссии от клиента.")
+        
+        return jsonify({"status": "success", "count": len(saved_paths)}), 200
+    except Exception as e:
+        logger.exception("Ошибка при сохранении снимков миссии")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

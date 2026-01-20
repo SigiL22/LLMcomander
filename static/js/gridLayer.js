@@ -132,6 +132,9 @@ var GridLayer = L.Layer.extend({
   },
 
   _redraw: function() {
+	if (!this._map) {
+        return; 
+    }  
     const conf = Config.get();
     const ctx = this._canvas.getContext('2d', { willReadFrequently: true });
     const size = this._map.getSize();

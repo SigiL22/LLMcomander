@@ -4,6 +4,7 @@ import json
 import logging
 import asyncio
 import os
+import PIL.Image # <--- ДОБАВЛЕН ИМПОРТ
 from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
 from typing import Dict, Optional, List
@@ -282,72 +283,59 @@ class LLMClient:
             logger.error(f"Не удалось отправить системный промпт для сессии {session_id}: {e}")
             return None
 
-    async def send_message(self, session_id: str, user_input: str, png_path: Optional[str] = None) -> Optional[str]:
+    async def send_message(self, session_id: str, user_input: str, image_paths: List[str] = None) -> Optional[str]:
+        """
+        image_paths: Список путей к файлам изображений (или один путь, или None)
+        """
         if not self.is_operational:
-            logger.error("LLMClient не готов к работе, сообщение не может быть отправлено.")
+            logger.error("LLMClient не готов к работе.")
             return None
 
         chat_session = self.chat_sessions.get(session_id)
         if not chat_session:
-            logger.error(f"Сессия {session_id} не найдена для отправки сообщения.")
-            return None
-
-        if not user_input and not png_path:
-            logger.warning("Попытка отправить пустое сообщение без изображения.")
+            logger.error(f"Сессия {session_id} не найдена.")
             return None
 
         try:
-            # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-            # Формируем подробное лог-сообщение для запроса
-            log_request_details = f"LLM Request (session: {session_id}):"
-            
-            # Пытаемся красиво отформатировать JSON, если это он
-            if user_input:
-                try:
-                    parsed_json = json.loads(user_input)
-                    pretty_json = json.dumps(parsed_json, ensure_ascii=False, indent=2)
-                    log_request_details += (f"\n--- Start of Text Payload (JSON) ---\n"
-                                            f"{pretty_json}\n"
-                                            f"--- End of Text Payload ---")
-                except json.JSONDecodeError:
-                    # Если не JSON, логируем как обычный текст
-                    log_request_details += (f"\n--- Start of Text Payload (String) ---\n"
-                                            f"{user_input}\n"
-                                            f"--- End of Text Payload ---")
-            
-            # Добавляем информацию об изображении, если оно есть
-            if png_path:
-                if os.path.exists(png_path):
-                    log_request_details += f"\n- Image Payload: {png_path} (exists)"
-                else:
-                    log_request_details += f"\n- Image Payload: {png_path} (NOT FOUND!)"
-
-            # Записываем всё в лог
-            logger.info(log_request_details)
-
+            # Формируем список частей контента
             content_parts = []
+            
+            # 1. Текст
             if user_input:
                 content_parts.append(user_input)
 
-            if png_path:
-                if os.path.exists(png_path) and os.path.isfile(png_path):
-                    try:
-                        with open(png_path, "rb") as f:
-                            png_data = f.read()
-                        content_parts.append(genai.types.Part.from_data(data=png_data, mime_type="image/png"))
-                    except Exception as img_e:
-                        logger.error(f"Ошибка чтения или добавления изображения из {png_path}: {img_e}")
-                else:
-                    logger.warning(f"Файл изображения не найден или не является файлом: {png_path}")
+            # 2. Изображения (список)
+            if image_paths:
+                # Если передали строку вместо списка, оборачиваем
+                if isinstance(image_paths, str):
+                    image_paths = [image_paths]
+                
+                for path in image_paths:
+                    if os.path.exists(path) and os.path.isfile(path):
+                        try:
+                            # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+                            # Вместо чтения байтов, открываем через PIL
+                            img = PIL.Image.open(path)
+                            content_parts.append(img)
+                            logger.info(f"Добавлено изображение (PIL): {path}")
+                            # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+                        except Exception as img_e:
+                            logger.error(f"Ошибка чтения изображения {path}: {img_e}")
+                    else:
+                        logger.warning(f"Файл изображения не найден: {path}")
 
             if not content_parts:
-                logger.error("Нет контента (ни текста, ни изображения) для отправки.")
+                logger.error("Нет контента для отправки.")
                 return None
+
+            # Логируем запрос (текст)
+            logger.info(f"LLM Request (session: {session_id}). Text length: {len(user_input)}. Images: {len(image_paths) if image_paths else 0}")
 
             answer_text = await self._retry_send_message(chat_session, content_parts)
             
-            # Логируем ответ
-            logger.info(f"LLM Response (session: {session_id}): {answer_text}")
+            if answer_text:
+                logger.info(f"LLM Response (session: {session_id}): {answer_text[:100]}...")
+            
             return answer_text
 
         except Exception as e:

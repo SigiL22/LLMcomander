@@ -28,16 +28,46 @@ function setupReportsStream() {
 		
         if (report.command === "start_mission") {
             console.log("Получена команда start_mission. Очистка состояния клиента...");
-            reports = []; // Очищаем массив докладов
+            window.missionMarkers = report.markers; 
+            window.hasCapturedInitialSnapshots = false;
+            
+            reports = []; 
             if (window.llmChat && typeof window.llmChat.clearChat === 'function') {
-                window.llmChat.clearChat(); // Очищаем окно чата
+                window.llmChat.clearChat(); 
             }
             if (window.missionSettings && typeof window.missionSettings.handleStartMission === 'function') {
                 window.missionSettings.handleStartMission();
             }
-            // Вызываем updateReports с пустым массивом, чтобы немедленно стереть маркеры с карты
+
+            // --- НОВОЕ: Парсим конфиг на клиенте, чтобы включить авто-захват ---
+            const configStr = report.config || "";
+            if (configStr) {
+                const parts = configStr.split(',');
+                for (let part of parts) {
+                    if (part.toLowerCase().includes('l-')) {
+                        let sideRaw = part.split('-')[1].trim().toUpperCase();
+                        
+                        // Приводим к именам UI (OPFOR, BLUFOR, Independent)
+                        if (sideRaw === 'EAST') sideRaw = 'OPFOR';
+                        if (sideRaw === 'WEST') sideRaw = 'BLUFOR';
+                        if (sideRaw === 'GUER' || sideRaw === 'RESISTANCE') sideRaw = 'Independent';
+                        
+                        // Устанавливаем сторону в настройках клиента
+                        if (window.missionSettings) {
+                            window.missionSettings.llmSide = sideRaw;
+                            console.log("Клиент авто-настроен на сторону:", sideRaw);
+                            
+                            // Обновляем UI селекта, если он есть
+                            const sideSelect = document.getElementById("llmSide");
+                            if (sideSelect) sideSelect.value = sideRaw;
+                        }
+                    }
+                }
+            }
+            // ------------------------------------------------------------------
+
             window.unitLayer.updateReports([]);
-        } 
+        }
         // --- НАЧАЛО ИЗМЕНЕНИЙ ---
         // Обрабатываем все остальные сообщения
         else {
