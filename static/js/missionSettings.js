@@ -207,11 +207,41 @@
       .then(r => r.json())
       .then(data => {
         if (data.status === 'success' || data.status === 'ignored') {
-          // Если сервер вернул сторону (например, "EAST"), обновляем UI и локальную переменную
           if (data.side) {
             console.log("Синхронизация с сервером: активная сторона LLM ->", data.side);
-            window.missionSettings.llmSide = data.side;
-            sideSelect.value = data.side;
+            
+            // 1. Попытка прямой установки
+            let targetSide = data.side;
+            
+            // 2. Если такой опции нет в списке, пробуем найти эквивалент
+            // Сервер возвращает: EAST, WEST, GUER
+            // В меню может быть: OPFOR, BLUFOR, Independent
+            const sideMap = {
+              "EAST": "OPFOR",
+              "WEST": "BLUFOR",
+              "GUER": "Independent",
+              "RESISTANCE": "Independent",
+              "CIV": "CIVILIAN"
+            };
+
+            // Проверяем, есть ли такая опция в селекте прямо сейчас
+            let optionExists = false;
+            for (let i = 0; i < sideSelect.options.length; i++) {
+                if (sideSelect.options[i].value === targetSide) {
+                    optionExists = true;
+                    break;
+                }
+            }
+
+            // Если опции "EAST" нет, пробуем конвертировать в "OPFOR"
+            if (!optionExists && sideMap[targetSide]) {
+                targetSide = sideMap[targetSide];
+                console.log(`Конвертация стороны: ${data.side} -> ${targetSide}`);
+            }
+
+            // Устанавливаем значение
+            window.missionSettings.llmSide = targetSide;
+            sideSelect.value = targetSide;
           }
         }
       })

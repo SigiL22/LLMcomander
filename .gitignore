@@ -11,3 +11,7 @@ llm_client.log
 *.log
 *.log
 *.json
+config.json
+.env
+__pycache__/
+*.pyc

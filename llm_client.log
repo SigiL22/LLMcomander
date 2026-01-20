@@ -103,3 +103,260 @@ Initial mission data. You are commanding side: EAST. Your primary enemy is: WEST
 3. Этот сценарий — PvE (против ботов) или серьезное PvP (типа проекта WOG/Red-Bear)? От этого зависит, насколько хитрыми будут «наблюдатели».
 
 **Что прикажете делать первым шагом?**
+09:15:58 [INFO] llm_client: Инициализация LLMClient...
+09:15:58 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+09:15:58 [INFO] llm_client: Конфигурация Google API...
+09:15:58 [INFO] llm_client: Проверка доступности API и моделей...
+09:15:58 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+09:15:58 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+09:15:58 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+09:15:58 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+09:15:58 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+09:15:58 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+09:15:58 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+09:32:21 [INFO] llm_client: Инициализация LLMClient...
+09:32:21 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+09:32:21 [INFO] llm_client: Конфигурация Google API...
+09:32:21 [INFO] llm_client: Проверка доступности API и моделей...
+09:32:22 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+09:32:22 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+09:32:22 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+09:32:22 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+09:32:22 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+09:32:22 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+09:32:22 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+09:32:27 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+09:32:32 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+09:32:32 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+09:32:32 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+09:32:34 [INFO] llm_client: LLM Request (session: arma_session):
+--- Start of System Prompt ---
+Системный промт: пока просто пообщаемся на тему командования в Арма3
+--- End of System Prompt ---
+09:32:42 [INFO] llm_client: LLM Response (session: arma_session): С удовольствием! Командование в Arma 3 — это, пожалуй, самый глубокий и в то же время «болючий» пласт игры. Это не просто «наведи и выстрели», это менеджмент хаоса, логистики и психологии.
+
+В этой теме можно выделить три больших направления. О каком из них тебе интереснее поболтать?
+
+1.  **Командование ИИ-отрядом (Синглплеер/Кампании):**
+    Тут мы боремся с интерфейсом (клавиши F1-F12) и пытаемся заставить ботов не умирать в первые две минуты. Это отдельное искусство: как расставить их в «шахматку», как назначить сектора обстрела и почему медик всегда лезет под пули первым.
+
+2.  **Командование живыми игроками (Мильсим/Тактические игры):**
+    Тут уже вступает в игру «социалка». Нужно знать топографию, уметь работать с рацией (TFAR/ACRE2), понимать тактику (FIRE AND MOVEMENT) и, самое главное, удерживать внимание людей, чтобы они не разбрелись как коты. Это про дисциплину, краткость докладов и умение принимать решения, когда всё идет не по плану.
+
+3.  **Зевс (Zeus) — «Божественное» командование:**
+    Это когда ты не просто лидер, а режиссер всего боя. Ты создаешь сценарий на ходу, подкидываешь врагов, управляешь артиллерией и следишь, чтобы игрокам было и сложно, и интересно одновременно.
+
+**С чего начнем?** Может, у тебя есть какая-то конкретная история, когда твой план сработал идеально (или, наоборот, эпично провалился)? Или хочешь обсудить, какой мод лучше всего правит мозги ботам?
+09:32:42 [INFO] llm_client: LLM Request (session: arma_session):
+--- Start of Text Payload (String) ---
+Initial mission data. You are commanding side: EAST. Your primary enemy is: WEST.
+{"mission_markers": [{"t": "target", "p": [2733, 5211], "text": "a-opfor,d-blufor,l-opfor", "size": [50, 50]}, {"t": "intel", "p": [2741, 5221], "text": "Пехотное отделение противника"}, {"t": "intel", "p": [2690, 5824], "text": "бмп противника"}, {"t": "intel", "p": [3121, 5259], "text": "наблюдатель"}, {"t": "intel", "p": [2236, 5493], "text": "наблюдатель"}, {"t": "intel", "p": [3369, 4556], "text": "наблюдатель"}]}
+--- End of Text Payload ---
+09:32:52 [INFO] llm_client: LLM Response (session: arma_session): Принято, штаб на связи. Анализирую тактическую обстановку.
+
+**Сводка данных (сторона EAST):**
+*   **Объект атаки:** Квадрат [2733, 5211]. В зоне находится пехотное отделение WEST.
+*   **Силы противника:**
+    *   Пехотное отделение непосредственно на объекте.
+    *   БМП противника в резерве на севере [2690, 5824] (дистанция ~600м от цели).
+    *   Три наблюдательных поста (НП) на господствующих высотах/флангах: Восток [3121, 5259], Запад [2236, 5493] и Юго-Восток [3369, 4556].
+
+---
+
+### Предварительный тактический анализ:
+
+Противник организовал грамотную круговую оборону с упором на раннее обнаружение. Если мы пойдем в лоб, наблюдатели заметят нас за 500-800 метров, и к моменту нашего подхода к объекту нас встретит огонь пехоты, скорректированная арта и БМП, которая ударит с севера во фланг.
+
+**Мой план действий (как командира):**
+
+1.  **Ослепление (Suppressing the Eyes):**
+    Нам нужно ликвидировать или подавить наблюдателей. Приоритет — западный [2236, 5493] и восточный [3121, 5259] посты. Если мы уберем их, мы создадим "мертвую зону" для подхода.
+
+2.  **Блокирование резерва:**
+    БМП на севере [2690, 5824] — главная угроза. Нужно выделить ПТУР-расчет или маневренную группу с РПГ, которая займет позицию между БМП и объектом, чтобы перехватить её, как только она начнет выдвижение на помощь пехоте.
+
+3.  **Штурм:**
+    Основной удар наносить с южного или юго-западного направления, используя рельеф, чтобы минимизировать видимость с поста [3369, 4556].
+
+---
+
+**Чтобы я мог составить детальный приказ, мне нужны данные о моих силах (ORBAT):**
+1.  **Состав группы:** Сколько у нас отделений? Есть ли техника (БТР, БМП, Тигры)?
+2.  **Поддержка:** Доступна ли артиллерия (минометы) или авиация?
+3.  **Снаряжение:** Есть ли у нас ПТУРы или средства РЭБ/дымы для подавления обзора?
+
+*Жду уточнения по моим активам, и будем рисовать план наступления.*
+09:37:04 [INFO] llm_client: LLM Request (session: arma_session):
+--- Start of Text Payload (String) ---
+Periodic roll call. Current status of your forces
+{"units": [{"n": "Альфа 1-1", "p": [2322, 4684, 243, 103], "c": "-[SF]- SigiL", "co": 1, "u_summary": {"СВДМ": 1}, "v": []}]}
+--- End of Text Payload ---
+09:37:04 [ERROR] llm_client: Неизвестная ошибка при отправке в LLM (попытка 1): None Stream removed
+Traceback (most recent call last):
+  File "C:\LLMcomander\llm_client.py", line 191, in _retry_send_message
+    response = await asyncio.to_thread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\asyncio\threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\generativeai\generative_models.py", line 578, in send_message
+    response = self.model.generate_content(
+        contents=history,
+    ...<5 lines>...
+        request_options=request_options,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\generativeai\generative_models.py", line 331, in generate_content
+    response = self._client.generate_content(
+        request,
+        **request_options,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\ai\generativelanguage_v1beta\services\generative_service\client.py", line 835, in generate_content
+    response = rpc(
+        request,
+    ...<2 lines>...
+        metadata=metadata,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\gapic_v1\method.py", line 131, in __call__
+    return wrapped_func(*args, **kwargs)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_unary.py", line 293, in retry_wrapped_func
+    return retry_target(
+        target,
+    ...<3 lines>...
+        on_error=on_error,
+    )
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_unary.py", line 153, in retry_target
+    _retry_error_helper(
+    ~~~~~~~~~~~~~~~~~~~^
+        exc,
+        ^^^^
+    ...<6 lines>...
+        timeout,
+        ^^^^^^^^
+    )
+    ^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_base.py", line 212, in _retry_error_helper
+    raise final_exc from source_exc
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\retry\retry_unary.py", line 144, in retry_target
+    result = target()
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\api_core\grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.Unknown: None Stream removed
+09:37:04 [ERROR] llm_client: Не удалось отправить сообщение для сессии arma_session: None Stream removed
+09:40:52 [INFO] llm_client: Инициализация LLMClient...
+09:40:52 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+09:40:52 [INFO] llm_client: Конфигурация Google API...
+09:40:52 [INFO] llm_client: Проверка доступности API и моделей...
+09:40:53 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+09:40:53 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+09:40:53 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+09:40:53 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+09:40:53 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+09:40:53 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+09:40:53 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+09:40:58 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+09:41:03 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+09:41:03 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+09:41:03 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+09:41:04 [INFO] llm_client: LLM Request (session: arma_session):
+--- Start of System Prompt ---
+Системный промт: пока просто пообщаемся на тему командования в Арма3
+--- End of System Prompt ---
+09:41:12 [INFO] llm_client: LLM Response (session: arma_session): О, Арма 3 — это не просто игра, это полноценный симулятор головной боли для командира, но в этом-то и весь кайф. Давай пообщаемся.
+
+Командование здесь можно разделить на три огромных пласта, и каждый из них — это отдельное искусство:
+
+1.  **Управление ИИ-отрядом (ванильное меню):** Это те самые кнопки `F1-F12` и цифровое меню. Это борьба с логикой ботов, попытки заставить их не стоять посреди поля и правильно использовать микрорельеф.
+2.  **Командование живыми игроками (Squad Leading):** Здесь на первое место выходит психология, дикция и умение быстро принимать решения. Тут Arma превращается в симулятор радиопереговоров, особенно если стоят моды вроде TFAR или ACRE2.
+3.  **High Command (Верховное командование):** Режим «стратегии», где ты управляешь целыми группами через карту (Ctrl+Space).
+
+**С чего хочешь начать?** 
+
+Можем обсудить:
+*   **Тактику:** как правильно штурмовать города или расставлять сектора обстрела, чтобы твой отряд не выкосили одной очередью.
+*   **Техническую часть:** как эффективно пользоваться интерфейсом, ставить маркеры и передавать координаты.
+*   **Моды:** как ACE3, cTAB или системы связи меняют жизнь командира.
+*   **ИИ:** как заставить этих «болванчиков» работать как спецназ, а не как мишени в тире.
+
+У тебя уже есть опыт вождения групп, или ты только планируешь примерить на себя роль «зеленого слоника» (командира)?
+09:41:12 [INFO] llm_client: LLM Request (session: arma_session):
+--- Start of Text Payload (String) ---
+Initial mission data. You are commanding side: EAST. Your primary enemy is: WEST.
+{"mission_markers": [{"t": "target", "p": [2733, 5211], "text": "a-opfor,d-blufor,l-opfor", "size": [50, 50]}, {"t": "intel", "p": [2741, 5221], "text": "Пехотное отделение противника"}, {"t": "intel", "p": [2690, 5824], "text": "бмп противника"}, {"t": "intel", "p": [3121, 5259], "text": "наблюдатель"}, {"t": "intel", "p": [2236, 5493], "text": "наблюдатель"}, {"t": "intel", "p": [3369, 4556], "text": "наблюдатель"}]}
+--- End of Text Payload ---
+09:41:24 [INFO] llm_client: LLM Response (session: arma_session): Принял, штаб на связи. Анализирую вводные данные по сектору.
+
+### Оценка тактической обстановки (SITREP):
+
+**1. Объект (Target):** Квадрат [2733, 5211]. Судя по маркировке `d-blufor` и `l-opfor`, точка удерживается силами WEST, наша задача — захват (Attack). Зона компактная (50x50), что подразумевает ближний бой или укрепленный аванпост.
+
+**2. Силы противника:**
+*   **Пехота:** В самом центре цели [2741, 5221] находится полноценное отделение. Это наш основной противник в фазе штурма.
+*   **Бронетехника:** К северу [2690, 5824] зафиксирована БМП. Это критическая угроза. Она находится в ~600 метрах от цели и может сработать как мобильный резерв или вести огонь с дистанции, подавляя наши подступы.
+*   **Наблюдатели (Глаза):** Противник выставил три поста наблюдения, создав «треугольник» вокруг цели:
+    *   Запад [2236, 5493]
+    *   Восток [3121, 5259]
+    *   Юго-восток [3369, 4556] (самый дальний, прикрывает подходы с тыла).
+
+---
+
+### Мои предложения по планированию (COA):
+
+Чтобы выполнить задачу и не превратить наше отделение в «груз 200» на подступах, я предлагаю следующий план:
+
+#### Этап 1: Ослепление (Recon & Stealth)
+Нам нужно нейтрализовать хотя бы двух наблюдателей (Западного и Восточного). Если мы просто пойдем в лоб, БМП выйдет на позицию еще до того, как мы увидим цель.
+*   **Задача:** Скрытное устранение наблюдателей силами снайперской пары или бесшумным сближением.
+
+#### Этап 2: Анти-Блиц (Neutralize Armor)
+БМП на севере — главная проблема.
+*   **Вариант А:** Если у нас есть ПТРК (Титан/Малыш), нужно выставить расчет на возвышенности с видом на [2690, 5824] **до** начала основного штурма.
+*   **Вариант Б:** Диверсионная группа закладывает мины на дороге между БМП и целью.
+
+#### Этап 3: Штурм (The Push)
+Заходить предлагаю с **Юго-Запада**. Это позволит нам использовать складки местности, чтобы отрезаться от прямой видимости БМП на севере (если она еще жива) и зайти в тыл восточному наблюдателю.
+
+---
+
+**Запрос уточнений:**
+1.  **Наши силы:** Что у нас под рукой? (Пехотное отделение, пара групп спецназа, есть ли поддержка с воздуха или арта?)
+2.  **Время суток:** Сейчас день или работаем в ПНВ?
+3.  **Рельеф:** На какой карте работаем? (Алтис, Малден, Ливония?) Это определит, насколько эффективно будет работать БМП по нам.
+
+**Жду твоих распоряжений. С чего начнем подготовку операции?**
+09:43:34 [INFO] llm_client: LLM Request (session: arma_session):
+--- Start of Text Payload (String) ---
+Consolidated tactical reports from your units. Analyze the situation and issue commands if necessary.
+{"group_reports": [{"reporting_group": "Альфа 1-1", "position": [2346, 4713, 241], "unit_count": null, "reports": [{"event": "enemy_detected", "detected_type": "infantry", "count": 2, "position": [2739, 5228, 0]}]}]}
+--- End of Text Payload ---
+09:43:42 [INFO] llm_client: LLM Response (session: arma_session): Принято, Альфа 1-1. На связи Штаб.
+
+### Анализ доклада Альфы 1-1:
+Группа находится в точке **[2346, 4713]** на высоте 241 метр. Дистанция до цели — примерно **600-650 метров** по прямой на Северо-Восток. 
+Визуальный контакт с двумя пехотинцами в районе цели [2739, 5228] подтверждает данные разведки о наличии пехотного отделения на объекте.
+
+**Внимание, Альфа 1-1!** Вы находитесь в опасной близости от сектора обзора **западного наблюдателя** противника [2236, 5493]. Он находится севернее вас. Также помните о **БМП противника** [2690, 5824], которая находится дальше за целью, но имеет прямую видимость на подступы.
+
+---
+
+### ТАКТИЧЕСКИЕ ПРИКАЗЫ:
+
+**1. Группе Альфа 1-1 (Ваш текущий отряд):**
+*   **Статус:** Скрытное наблюдение (Eyes on).
+*   **Приказ:** Занять круговую оборону на высоте. **Огонь не открывать!** (ROE: Hold Fire). Ваша задача сейчас — разведка, а не штурм.
+*   **Дополнительно:** Попытайтесь обнаружить западного наблюдателя [2236, 5493]. Если он вас заметит, он наведет БМП или минометы.
+
+**2. Запрос на уточнение обстановки:**
+*   Альфа 1-1, доложите: есть ли визуальный контакт с **БМП** на севере [2690, 5824]? 
+*   Какое вооружение у вашего отряда? Есть ли ПТ-средства (РПГ/ПТРК) или дальнобойная оптика?
+
+**3. Координация:**
+*   Готовьтесь к выдвижению на позицию для атаки с Юго-Запада, но только после того, как мы поймем, где находится БМП и сможем её нейтрализовать.
+
+**Жду подтверждения получения приказов и уточненных данных по БМП.** *Конец связи.*

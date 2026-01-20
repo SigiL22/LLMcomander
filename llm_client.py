@@ -4,8 +4,12 @@ import json
 import logging
 import asyncio
 import os
+from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
 from typing import Dict, Optional, List
+
+# Загружаем переменные из .env (если файл существует)
+load_dotenv()
 
 # Попытка импорта библиотеки Google
 try:
@@ -37,7 +41,6 @@ if not logger.handlers:
 # --- Конец настройки логгера ---
 
 class LLMClient:
-    # ... (весь код __init__, _load_config, _save_config, _load_system_prompt, get_available_models, _check_model_availability без изменений) ...
     def __init__(self, config_file: str = "config.json", system_prompt_file: str = "system_prompt.txt"):
         self.config_file = config_file
         self.system_prompt_file = system_prompt_file
@@ -54,15 +57,30 @@ class LLMClient:
             logger.error("Библиотека google.generativeai не найдена. LLMClient будет нерабочим.")
             return
 
+        # 1. Загружаем JSON конфиг
         self.config = self._load_config()
-        self.gemini_api_key = self.config.get("geminy_api_key")
+
+        # --- ЛОГИКА ДЛЯ API КЛЮЧА (ПРИОРИТЕТ .ENV) ---
+        # Сначала ищем в переменных окружения (безопасность)
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        # Если нет, ищем в конфиге (совместимость)
         if not self.gemini_api_key:
-            logger.error(f"API ключ 'geminy_api_key' не найден или пуст в {self.config_file}.")
+            self.gemini_api_key = self.config.get("geminy_api_key")
+
+        if not self.gemini_api_key or self.gemini_api_key == "INSERT_YOUR_KEY_HERE":
+            logger.error(f"API ключ не найден! Проверьте файл .env (GEMINI_API_KEY).")
             return
 
-        self.model_name = self.config.get("model", "gemini-1.5-flash-latest")
+        # --- ЛОГИКА ДЛЯ МОДЕЛИ (ПРИОРИТЕТ CONFIG.JSON) ---
+        # Сначала ищем в конфиге (чтобы сохранить выбор пользователя из UI)
+        self.model_name = self.config.get("model")
+        
+        # Если в конфиге пусто, берем дефолт из .env или хардкод
         if not self.model_name:
-            logger.error(f"Имя модели 'model' не найдено или пусто в {self.config_file}.")
+            self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest")
+
+        if not self.model_name:
+            logger.error(f"Имя модели не найдено.")
             return
 
         self.system_prompt = self._load_system_prompt()
@@ -76,10 +94,11 @@ class LLMClient:
 
             logger.info("Проверка доступности API и моделей...")
             available_models = self.get_available_models()
+            
             if not available_models:
-                raise RuntimeError("Не удалось получить список моделей от API. Проверьте ключ API и доступность API для вашего региона.")
-
-            self._check_model_availability(available_models)
+                logger.warning("Не удалось получить список моделей. Пробуем инициализировать модель вслепую...")
+            else:
+                self._check_model_availability(available_models)
 
             logger.info(f"Попытка инициализации модели: {self.model_name}")
             generation_config = GenerationConfig(candidate_count=1)
