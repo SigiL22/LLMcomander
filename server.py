@@ -64,9 +64,12 @@ app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 logger.info("Объект Flask 'app' создан.")
 TILES_FOLDER = "maps/chernarus/"
 SNAPSHOTS_FOLDER = "snapshots"
+JSON_FOLDER = "json_data"  # <--- НОВАЯ КОНСТАНТА
 CACHE_TIMEOUT = 86400
 TRANSPARENT_TILE = "transparent.png"
-os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True); os.makedirs(DB_DIR, exist_ok=True)
+os.makedirs(SNAPSHOTS_FOLDER, exist_ok=True); 
+os.makedirs(DB_DIR, exist_ok=True)
+os.makedirs(JSON_FOLDER, exist_ok=True) # <--- СОЗДАЕМ ЕЁ
 
 
 # --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И УПРАВЛЕНИЕ ASYNCIO ЛУПОМ ---
@@ -568,18 +571,78 @@ async def send_system_prompt(markers: list = None):
     if llm_enemy_side:
         context_header += f" Your primary enemy is: {llm_enemy_side}."
 
-    # --- НОВАЯ ЛОГИКА ДЛЯ ИЗОБРАЖЕНИЙ ---
+    # --- ЛОГИКА ДЛЯ ИЗОБРАЖЕНИЙ ---
     images_to_send = []
     if current_mission_snapshots:
         logger.info(f"Прикрепляем {len(current_mission_snapshots)} снимков к запросу инициализации.")
         images_to_send = current_mission_snapshots
     else:
         logger.info("Снимки карты не были загружены клиентом. Отправляем только текстовые данные.")
-    # -------------------------------------
+    
+    # --- НОВАЯ ЛОГИКА: Чтение сохраненных JSON (Names/Buildings) ---
+    import glob
+    additional_json_context = ""
+    
+    try:
+        # Ищем внутри папки JSON_FOLDER файлы, созданные capture.js
+        path_names_pattern = os.path.join(JSON_FOLDER, "names_*.json")
+        path_buildings_pattern = os.path.join(JSON_FOLDER, "buildings_*.json")
+        
+        # Сортируем по времени (самые новые в конце)
+        list_names = sorted(glob.glob(path_names_pattern), key=os.path.getmtime)
+        list_buildings = sorted(glob.glob(path_buildings_pattern), key=os.path.getmtime)
+        
+        found_data = []
+
+        target_name_file = None
+        
+        # 1. Приоритет: Стратегический файл (самый свежий из стратегических)
+        strat_files = [f for f in list_names if "_strat_" in f]
+        if strat_files:
+            latest_strat = strat_files[-1]
+            if time.time() - os.path.getmtime(latest_strat) < 60:
+                target_name_file = latest_strat
+
+        # 2. Если стратегического нет, берем просто самый свежий (например, в обороне)
+        if not target_name_file and list_names:
+            latest_any = list_names[-1]
+            if time.time() - os.path.getmtime(latest_any) < 60:
+                target_name_file = latest_any
+
+        if target_name_file:
+            with open(target_name_file, 'r', encoding='utf-8') as f:
+                names_data = json.load(f)
+                found_data.append(f'"map_locations": {json.dumps(names_data, ensure_ascii=False)}')
+                logger.info(f"В промпт добавлен контекст из файла имен: {target_name_file}")
+
+        # Берем самый свежий файл зданий
+        if list_buildings:
+            latest_buildings = list_buildings[-1]
+            if time.time() - os.path.getmtime(latest_buildings) < 60:
+                with open(latest_buildings, 'r', encoding='utf-8') as f:
+                    buildings_data = json.load(f)
+                    found_data.append(f'"nearby_buildings": {json.dumps(buildings_data, ensure_ascii=False)}')
+                    logger.info(f"В промпт добавлен контекст из файла: {latest_buildings}")
+
+        # Собираем куски JSON строк
+        if found_data:
+            additional_json_context = ",\n" + ",\n".join(found_data)
+
+    except Exception as e:
+        logger.error(f"Ошибка при чтении дополнительных JSON файлов карты: {e}")
+    # -------------------------------------------------------------
 
     # 5. Склеиваем всё в одну строку для отправки и ОТПРАВЛЯЕМ
     try:
-        json_str = json.dumps(initial_data_payload, ensure_ascii=False)
+        # Формируем базовый JSON
+        json_str_raw = json.dumps(initial_data_payload, ensure_ascii=False)
+        
+        # Если есть дополнительные данные из файлов, вклеиваем их внутрь объекта
+        if additional_json_context:
+            # Убираем последнюю закрывающую фигурную скобку '}', добавляем данные и возвращаем '}'
+            json_str = json_str_raw.rstrip('}') + additional_json_context + "}"
+        else:
+            json_str = json_str_raw
         
         full_combined_prompt = (
             f"{sys_prompt_text}\n\n"       # СИСТЕМНАЯ ИНСТРУКЦИЯ
@@ -591,14 +654,14 @@ async def send_system_prompt(markers: list = None):
         
         logger.info(f"Отправка ОБЪЕДИНЕННОГО запроса в LLM ({len(full_combined_prompt)} символов + {len(images_to_send)} изображений)...")
         
-        # --- ИЗМЕНЕННЫЙ ВЫЗОВ (добавлен image_paths) ---
+        # Отправляем сообщение
         response = await llm_client.send_message(
             "arma_session", 
             user_input=full_combined_prompt,
-            image_paths=images_to_send # Передаем список путей к картинкам
+            image_paths=images_to_send 
         )
         
-        # Очищаем список снимков после отправки, чтобы они не ушли со следующим сообщением
+        # Очищаем список снимков
         current_mission_snapshots = []
         
         # Обрабатываем ответ
@@ -615,7 +678,6 @@ async def send_system_prompt(markers: list = None):
 
     except Exception as e:
         logger.exception("Критическая ошибка при отправке объединенных данных в LLM.")
-        # Даже при ошибке лучше очистить список снимков, чтобы не застрять
         current_mission_snapshots = []
         return False
 
@@ -883,19 +945,25 @@ def get_names_in_area():
 
 
 @app.route("/save_json", methods=["POST"])
-# ... (без изменений) ...
 def save_json():
-    # ... (код сохранения JSON) ...
     data = request.get_json()
-    if not data or "filename" not in data or "data" not in data: return jsonify({"status": "error", "message": "Invalid parameters"}), 400
+    if not data or "filename" not in data or "data" not in data: 
+        return jsonify({"status": "error", "message": "Invalid parameters"}), 400
     try:
         filename = os.path.basename(data["filename"])
-        if not filename.lower().endswith(".json"): return jsonify({"status": "error", "message": "Filename must end with .json"}), 400
+        if not filename.lower().endswith(".json"): 
+            return jsonify({"status": "error", "message": "Filename must end with .json"}), 400
+        
         content = data["data"]
-        file_path = os.path.join(BASE_DIR, filename)
-        with open(file_path, 'w', encoding='utf-8') as f: json.dump(content, f, ensure_ascii=False, indent=4)
+        
+        # --- ИЗМЕНЕНИЕ: Путь ведет в JSON_FOLDER ---
+        file_path = os.path.join(JSON_FOLDER, filename)
+        # ------------------------------------------
+        
+        with open(file_path, 'w', encoding='utf-8') as f: 
+            json.dump(content, f, ensure_ascii=False, indent=4)
         return jsonify({"status": "success", "filename": filename}), 200
-    except Exception as e: #...
+    except Exception as e:
         logger.exception(f"Ошибка сохранения JSON: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 

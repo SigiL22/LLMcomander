@@ -42,22 +42,25 @@ async function performInitialCaptureAndSend() {
         const mY = Math.floor(defenseMarker.pos[1] / 100);
         
         // Делаем один детальный снимок вокруг точки обороны
+        const filename = `snap_defense_tac_${Date.now()}.png`; // Имя заранее
+        
         try {
             const result = await captureMapArea(
                 mX, mY, 
                 tacticalRadiusCells, tacticalRadiusCells, 
-                true,       // showLabels (сетка)
-                [mySide],   // сторона (для фильтра юнитов)
-                false       // skipDetails=FALSE (нам нужен JSON зданий для обороны!)
+                true, 
+                [mySide], 
+                false, 
+                filename // <--- Передали
             );
             
             snapshots.push({ 
                 type: "tactical", 
                 image: result.mapImage, 
-                filename: `snap_defense_tac_${Date.now()}.png` 
+                filename: filename // <--- Использовали
             });
         } catch (e) {
-            console.error("[AutoCapture] Ошибка съемки обороны:", e);
+            console.error("[AutoCapture] Ошибка съемки цели:", e);
         }
     }
 
@@ -71,18 +74,19 @@ async function performInitialCaptureAndSend() {
         // А. Тактический снимок (Финиш) - Вокруг цели
         try {
             console.log("[AutoCapture] Снимаем цель...");
-            const tacResult = await captureMapArea(
-                mX, mY, 
-                tacticalRadiusCells, tacticalRadiusCells, 
-                true, 
-                [mySide], 
-                false // JSON зданий нужен, чтобы штурмовать дома
-            );
-            snapshots.push({ 
-                type: "tactical", 
-                image: tacResult.mapImage, 
-                filename: `snap_attack_tac_${Date.now()}.png` 
-            });
+			const filename = `snap_attack_tac_${Date.now()}.png`; // Генерируем имя заранее
+			const result = await captureMapArea(
+				mX, mY, 
+				tacticalRadiusCells, tacticalRadiusCells, 
+				true, [mySide], false, 
+				filename // <--- Передаем имя сюда
+			);
+			
+			snapshots.push({ 
+				type: "tactical", 
+				image: result.mapImage, 
+				filename: filename // И используем то же имя здесь
+			});
         } catch (e) {
             console.error("[AutoCapture] Ошибка съемки цели:", e);
         }
@@ -103,25 +107,32 @@ async function performInitialCaptureAndSend() {
             // Ограничитель: если карта получается больше 5x5 км (50 ячеек радиус),
             // лучше ограничить, иначе ничего не будет видно.
             // Прижимаем камеру к цели, но захватываем кусок маршрута.
-            if (stratParams.regionSizeX > 25) stratParams.regionSizeX = 25;
-            if (stratParams.regionSizeY > 25) stratParams.regionSizeY = 25;
+            // if (stratParams.regionSizeX > 25) stratParams.regionSizeX = 25;
+            // if (stratParams.regionSizeY > 25) stratParams.regionSizeY = 25;
 
-            try {
+			try {
                 console.log("[AutoCapture] Снимаем общий план...");
+                
+                // 1. Генерируем имя файла ЗАРАНЕЕ
+                const stratFilename = `snap_attack_strat_${Date.now()}.png`;
+
+                // 2. Передаем это имя последним аргументом в captureMapArea
                 const stratResult = await captureMapArea(
                     stratParams.cellX,
                     stratParams.cellY,
                     stratParams.regionSizeX,
                     stratParams.regionSizeY,
-                    false,      // Лейблы сетки можно выключить для чистоты
+                    false,      
                     [mySide],
-                    true        // skipDetails=TRUE (Не генерируем JSON зданий для огромной карты!)
+                    true,          // skipDetails=TRUE
+                    stratFilename  // <--- ВАЖНО: передаем имя сюда
                 );
                 
+                // 3. Используем то же самое имя для отправки списка
                 snapshots.push({ 
                     type: "strategic", 
                     image: stratResult.mapImage, 
-                    filename: `snap_attack_strat_${Date.now()}.png` 
+                    filename: stratFilename 
                 });
             } catch (e) {
                 console.error("[AutoCapture] Ошибка съемки маршрута:", e);

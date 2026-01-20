@@ -10,19 +10,15 @@
  * @param {Array} sides - [ВыбраннаяСторона, Враги...]
  * @param {boolean} skipDetails - Если true, не генерирует и не сохраняет JSON зданий и названий (для обзорных снимков).
  */
-function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, showCellLabels, sides, skipDetails = false) {
+function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, showCellLabels, sides, skipDetails = false, customFilename = null) {
   if (regionSizeY === undefined || regionSizeY === null) {
     regionSizeY = regionSizeX;
   }
 
   return new Promise((resolve, reject) => {
     // --- ХАК ДЛЯ GRIDLAYER ---
-    // GridLayer читает настройки напрямую из Config.get(). 
-    // Мы временно подменяем глобальную настройку, чтобы на снимке лейблы отрисовались согласно аргументу showCellLabels.
     const conf = Config.get();
-    const originalShowLabelsState = conf.cellCoordStyle.show; // Запоминаем исходное состояние
-    
-    // Применяем временную настройку
+    const originalShowLabelsState = conf.cellCoordStyle.show;
     conf.cellCoordStyle.show = showCellLabels;
     Config.set(conf); 
 
@@ -84,12 +80,13 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
       scrollWheelZoom: false,
       boxZoom: false,
       keyboard: false,
-      zoomAnimation: false
+      zoomAnimation: false,
+      fadeAnimation: false // Отключаем анимацию для надежности html2canvas
     });
 
     const tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
       noWrap: true,
-      tileBuffer: 2,
+      tileBuffer: 10, // <--- УВЕЛИЧЕНО С 2 ДО 10: Грузим больше тайлов вокруг, чтобы не было серых краев
       maxNativeZoom: 7,
       maxZoom: MAX_ZOOM,
       bounds: [[-32768, -32768], [32768, 32768]],
@@ -113,20 +110,26 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
     if (gridLayerInstance._redraw) gridLayerInstance._redraw();
     if (namesLayerInstance._createMarkers) namesLayerInstance._createMarkers();
 
-    // Функция для восстановления конфига (вызывается в конце)
     const restoreConfig = () => {
         conf.cellCoordStyle.show = originalShowLabelsState;
         Config.set(conf);
-        console.log("[captureMapArea] Глобальные настройки лейблов восстановлены:", originalShowLabelsState);
+        console.log("[captureMapArea] Глобальные настройки лейблов восстановлены");
     };
 
-    // 5. Рендеринг и сохранение
-    tileLayer.on('load', function() {
-      console.log("[captureMapArea] Тайлы готовы. Рендеринг...");
-      
-      setTimeout(() => {
+    // 5. Улучшенная логика ожидания
+    const tryCapture = () => {
+        // Проверяем, грузит ли еще Leaflet тайлы
+        if (tileLayer.isLoading()) {
+            console.log("[captureMapArea] Leaflet все еще грузит тайлы. Ждем...");
+            setTimeout(tryCapture, 500);
+            return;
+        }
+
+        console.log("[captureMapArea] Тайлы загружены. Старт html2canvas...");
+        
         html2canvas(hiddenContainer, {
           useCORS: true,
+          allowTaint: true, // Разрешаем "грязный" канвас (локально это ок)
           onclone: (clonedDoc) => {
             const hiddenMapElement = clonedDoc.querySelector('.leaflet-container');
             if (hiddenMapElement) {
@@ -141,8 +144,18 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
         }).then(canvas => {
           // -- Сохранение изображения --
           const mapImage = canvas.toDataURL("image/png");
-          const typePrefix = skipDetails ? "strategic_" : "tactical_";
-          const snapshotFileName = "snapshot_" + typePrefix + new Date().toISOString().replace(/[:.]/g, "-") + ".png";
+          let snapshotFileName;
+          let jsonBaseName;
+
+          if (customFilename) {
+              snapshotFileName = customFilename;
+              jsonBaseName = customFilename.replace(/\.[^/.]+$/, "");
+          } else {
+              const typePrefix = skipDetails ? "strategic_" : "tactical_";
+              const timePart = new Date().toISOString().replace(/[:.]/g, "-");
+              jsonBaseName = "snapshot_" + typePrefix + timePart; 
+              snapshotFileName = jsonBaseName + ".png";
+          }
           
           fetch('/save_snapshot', {
             method: 'POST',
@@ -163,7 +176,7 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
               .then(res => res.json())
               .then(buildings => {
                   const bJson = buildings.map(b => ({ i: b.id, n: b.name, p: [b.x, b.y, b.z], in: b.interior }));
-                  const fn = "buildings_" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+                  const fn = "buildings_" + jsonBaseName + ".json";
                   return fetch('/save_json', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -182,7 +195,7 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
           .then(res => res.json())
           .then(names => {
               const nJson = names.map(n => ({ i: n.id, n: n.name, t: n.type, p: [n.x, n.y] }));
-              const fn = "names_" + typePrefix + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+              const fn = "names_" + jsonBaseName + ".json";
               return fetch('/save_json', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -190,7 +203,6 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
               }).then(() => nJson);
           });
 
-          // Сбор маркеров юнитов
           const bounds = offscreenMap.getBounds();
           const unitMarkers = [];
           let chosenSide = (sides && sides.length > 0) ? sides[0] : null;
@@ -219,10 +231,7 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
           Promise.all([buildingsPromise, namesPromise]).then(([buildingsData, namesData]) => {
               offscreenMap.remove();
               document.body.removeChild(hiddenContainer);
-              
-              // ВОССТАНАВЛИВАЕМ КОНФИГ
               restoreConfig();
-
               resolve({
                   mapImage: mapImage,
                   unitMarkers: unitMarkers,
@@ -233,7 +242,7 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
               console.error("[captureMapArea] Ошибка JSON:", err);
               offscreenMap.remove();
               document.body.removeChild(hiddenContainer);
-              restoreConfig(); // Восстанавливаем даже при ошибке
+              restoreConfig();
               reject(err);
           });
 
@@ -241,22 +250,28 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
           console.error("[captureMapArea] Ошибка html2canvas:", err);
           offscreenMap.remove();
           document.body.removeChild(hiddenContainer);
-          restoreConfig(); // Восстанавливаем даже при ошибке
+          restoreConfig();
           reject(err);
         });
-      }, 2000);
+    };
+
+    // Запускаем процесс ожидания загрузки
+    tileLayer.on('load', function() {
+        console.log("[captureMapArea] Событие load сработало. Старт безопасного ожидания...");
+        // Ждем 4 секунды (надежный запас для больших карт) + проверка isLoading
+        setTimeout(tryCapture, 4000); 
     });
 
-    // Watchdog
+    // Watchdog (увеличен до 30 сек для больших карт)
     setTimeout(() => {
         if (!offscreenMap._loaded && document.body.contains(hiddenContainer)) {
             console.error("[captureMapArea] Watchdog timeout.");
             offscreenMap.remove();
             document.body.removeChild(hiddenContainer);
-            restoreConfig(); // Восстанавливаем
+            restoreConfig();
             reject(new Error("Timeout"));
         }
-    }, 15000);
+    }, 30000);
   });
 }
 

@@ -22,13 +22,13 @@ var Config = (function(){
     cellCoordStyle: { show: false, fontFamily: "sans-serif", fontSize: 12, color: "#000000", opacity: 0.80 },
     // Настройки для надписей, получаемых из базы (по типам)
     nameSettings: {
-      "NameCityCapital": { displayName: "Столица", fontFamily: "Arial", fontSize: 16, color: "#FF0000", opacity: 1, minZoom: 4 },
-      "NameCity":        { displayName: "Город",   fontFamily: "Verdana", fontSize: 12, color: "#0000FF", opacity: 0.80, minZoom: 5 },
-      "NameVillage":     { displayName: "Деревня", fontFamily: "'Times New Roman'", fontSize: 14, color: "#00AA00", opacity: 0.90, minZoom: 6 },
-      "Hill":            { displayName: "Холм",    fontFamily: "Arial", fontSize: 14, color: "#FFA500", opacity: 0.85, minZoom: 5 },
-      "NameLocal":       { displayName: "Местность", fontFamily: "Courier New", fontSize: 12, color: "#800080", opacity: 0.80, minZoom: 6 },
-      "NameMarine":      { displayName: "Вода",    fontFamily: "Georgia", fontSize: 12, color: "#0000FF", opacity: 0.80, minZoom: 5 },
-	  "Height":          { displayName: "Высота",    fontFamily: "Arial", fontSize: 16, color: "#FF0000", opacity: 1, minZoom: 4 },
+      "NameCityCapital": { displayName: "Столица", fontFamily: "Arial", fontSize: 16, color: "#FF0000", opacity: 1, minZoom: 1 },
+      "NameCity":        { displayName: "Город",   fontFamily: "Verdana", fontSize: 12, color: "#0000FF", opacity: 0.80, minZoom: 1 },
+      "NameVillage":     { displayName: "Деревня", fontFamily: "'Times New Roman'", fontSize: 14, color: "#00AA00", opacity: 0.90, minZoom: 1 },
+      "Hill":            { displayName: "Холм",    fontFamily: "Arial", fontSize: 14, color: "#FFA500", opacity: 0.85, minZoom: 1 },
+      "NameLocal":       { displayName: "Местность", fontFamily: "Courier New", fontSize: 12, color: "#800080", opacity: 0.80, minZoom: 1 },
+      "NameMarine":      { displayName: "Вода",    fontFamily: "Georgia", fontSize: 12, color: "#0000FF", opacity: 0.80, minZoom: 1 },
+	  "Height":          { displayName: "Высота",    fontFamily: "Arial", fontSize: 16, color: "#FF0000", opacity: 1, minZoom: 1 },
     }
   };
 

@@ -334,7 +334,7 @@ class LLMClient:
             answer_text = await self._retry_send_message(chat_session, content_parts)
             
             if answer_text:
-                logger.info(f"LLM Response (session: {session_id}): {answer_text[:100]}...")
+                logger.info(f"LLM Response (session: {session_id}):\n{answer_text}")
             
             return answer_text
 

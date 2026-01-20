@@ -64,38 +64,42 @@ function getFriendlyCenterOfMass(side) {
  * @returns {Object} - { cellX, cellY, regionSizeX, regionSizeY } для функции captureMapArea
  */
 function calculateStrategicParams(p1, p2) {
-    // 1. Находим геометрический центр между двумя точками
-    const midX = (p1.x + p2.x) / 2;
-    const midY = (p1.y + p2.y) / 2;
+    // 1. Находим границы миссии (минимумы и максимумы)
+    const minMissionX = Math.min(p1.x, p2.x);
+    const maxMissionX = Math.max(p1.x, p2.x);
+    const minMissionY = Math.min(p1.y, p2.y);
+    const maxMissionY = Math.max(p1.y, p2.y);
 
-    // 2. Вычисляем расстояние по осям (абсолютная разница)
-    const diffX = Math.abs(p1.x - p2.x);
-    const diffY = Math.abs(p1.y - p2.y);
+    // 2. ФИКСИРОВАННЫЙ БУФЕР (в метрах)
+    // Добавляем по 2000 метров с каждой стороны.
+    // Это гарантирует, что за точкой старта и целью всегда будет 2км карты.
+    const bufferMeters = 1000; 
 
-    // 3. Добавляем отступы (padding), чтобы точки не были на самом краю экрана
-    // 1.3 = +30% запаса места
-    const padding = 1.3; 
-    const totalWidthMeters = diffX * padding;
-    const totalHeightMeters = diffY * padding;
+    // 3. Вычисляем размеры области обзора
+    const viewWidth = (maxMissionX - minMissionX) + (bufferMeters * 2);
+    const viewHeight = (maxMissionY - minMissionY) + (bufferMeters * 2);
 
-    // 4. Конвертируем в "радиусы ячеек" для captureMapArea
-    // regionSize - это расстояние от центра до края. То есть половина ширины.
-    // 1 ячейка = 100 метров.
+    // 4. Вычисляем центр этой области
+    // (min + max) / 2, но с учетом расширенных границ
+    const viewMinX = minMissionX - bufferMeters;
+    const viewMinY = minMissionY - bufferMeters;
     
-    // Минимум 5 ячеек (500м радиус), чтобы совсем в упор не снимать
-    let rX = Math.ceil((totalWidthMeters / 2) / 100);
-    if (rX < 5) rX = 5;
+    const centerX = viewMinX + viewWidth / 2;
+    const centerY = viewMinY + viewHeight / 2;
 
-    let rY = Math.ceil((totalHeightMeters / 2) / 100);
-    if (rY < 5) rY = 5;
+    // 5. Переводим в "радиусы ячеек" (половина стороны / 100)
+    let rX = Math.ceil((viewWidth / 2) / 100);
+    let rY = Math.ceil((viewHeight / 2) / 100);
 
-    // 5. Конвертируем центр в координаты ячеек
-    const cX = Math.floor(midX / 100);
-    const cY = Math.floor(midY / 100);
+    // Минимальный размер (на всякий случай, хотя буфер уже дал 20 ячеек)
+    if (rX < 15) rX = 30;
+    if (rY < 15) rY = 30;
+
+    console.log(`[mapUtils] Стратегический расчет: Буфер=${bufferMeters}m. Размер области: ${Math.round(viewWidth)}x${Math.round(viewHeight)}m`);
 
     return {
-        cellX: cX,
-        cellY: cY,
+        cellX: Math.floor(centerX / 100),
+        cellY: Math.floor(centerY / 100),
         regionSizeX: rX,
         regionSizeY: rY
     };
