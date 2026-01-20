@@ -30,3 +30,291 @@
 **Как думаешь, стоит ли нам действовать скрытно через южные леса (район Козловки), или попробуем дерзкий охват Зеленогорска с севера, чтобы сразу выбить Брэдли?**
 
 И ещё вопрос: насколько "душно" будем играть? С полным микроменеджментом каждой позиции или верхнеуровневыми приказами отделениям?
+01:10:11 [INFO] llm_client: Инициализация LLMClient...
+01:10:11 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+01:10:11 [INFO] llm_client: Конфигурация Google API...
+01:10:11 [INFO] llm_client: Проверка доступности API и моделей...
+01:10:11 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+01:10:11 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+01:10:11 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+01:10:11 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+01:10:11 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+01:10:11 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+01:10:11 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+01:10:19 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+01:10:26 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+01:10:26 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+01:10:26 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+01:10:52 [INFO] llm_client: Добавлено изображение (PIL): snapshots\snap_attack_tac_1768939828966.png
+01:10:52 [INFO] llm_client: Добавлено изображение (PIL): snapshots\snap_attack_strat_1768939842848.png
+01:10:52 [INFO] llm_client: LLM Request (session: arma_session). Text length: 37217. Images: 2
+01:11:06 [INFO] llm_client: LLM Response (session: arma_session):
+[
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "type": "MOVE",
+    "position": [4153, 5422, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "WEDGE"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "type": "MOVE",
+    "position": [4400, 5150, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "WEDGE"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "type": "MOVE",
+    "position": [4683, 5094, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "WEDGE"
+  },
+  {
+    "command": "set_combat_mode",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "mode": "YELLOW"
+  },
+  {
+    "command": "set_combat_mode",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "mode": "YELLOW"
+  },
+  {
+    "command": "set_combat_mode",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "mode": "YELLOW"
+  }
+]
+01:16:01 [INFO] llm_client: Инициализация LLMClient...
+01:16:01 [INFO] llm_client: Системный промпт загружен из system_prompt.txt.
+01:16:01 [INFO] llm_client: Конфигурация Google API...
+01:16:01 [INFO] llm_client: Проверка доступности API и моделей...
+01:16:02 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+01:16:02 [INFO] llm_client: Выбранная модель 'gemini-3-flash-preview' доступна.
+01:16:02 [INFO] llm_client: Попытка инициализации модели: gemini-3-flash-preview
+01:16:02 [INFO] llm_client: Объект модели gemini-3-flash-preview создан.
+01:16:02 [INFO] llm_client: LLMClient успешно инициализирован и готов к работе.
+01:16:02 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+01:16:02 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+01:16:25 [WARNING] llm_client: Сессия arma_session уже существует. Пересоздание для сброса истории...
+01:16:25 [INFO] llm_client: Создание/пересоздание chat_session для arma_session
+01:16:25 [INFO] llm_client: Сессия arma_session успешно создана/пересоздана.
+01:16:26 [INFO] llm_client: Доступные модели (generateContent): ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-2.0-flash-lite-preview', 'gemini-exp-1206', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts', 'gemma-3-1b-it', 'gemma-3-4b-it', 'gemma-3-12b-it', 'gemma-3-27b-it', 'gemma-3n-e4b-it', 'gemma-3n-e2b-it', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview', 'gemini-robotics-er-1.5-preview', 'gemini-2.5-computer-use-preview-10-2025', 'deep-research-pro-preview-12-2025']
+01:16:53 [INFO] llm_client: Добавлено изображение (PIL): snapshots\snap_attack_tac_1768940190223.png
+01:16:53 [INFO] llm_client: Добавлено изображение (PIL): snapshots\snap_attack_strat_1768940204092.png
+01:16:53 [INFO] llm_client: LLM Request (session: arma_session). Text length: 37217. Images: 2
+01:17:11 [INFO] llm_client: LLM Response (session: arma_session):
+[
+  {
+    "command": "set_behaviour",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "mode": "AWARE"
+  },
+  {
+    "command": "set_speed_mode",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "speed": "FULL"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "type": "MOVE",
+    "position": [4500, 5200, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "COLUMN"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "type": "SAD",
+    "position": [2747, 5253, 0],
+    "behaviour": "COMBAT",
+    "speed": "NORMAL",
+    "formation": "WEDGE"
+  },
+  {
+    "command": "set_behaviour",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "mode": "AWARE"
+  },
+  {
+    "command": "set_speed_mode",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "speed": "FULL"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "type": "MOVE",
+    "position": [4500, 5600, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "COLUMN"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "type": "SAD",
+    "position": [2675, 5661, 0],
+    "behaviour": "STEALTH",
+    "speed": "NORMAL",
+    "formation": "LINE",
+    "combatMode": "RED"
+  },
+  {
+    "command": "set_behaviour",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "mode": "AWARE"
+  },
+  {
+    "command": "set_speed_mode",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "speed": "FULL"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "type": "MOVE",
+    "position": [4500, 4600, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "COLUMN"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "type": "SAD",
+    "position": [3376, 4567, 0],
+    "behaviour": "COMBAT",
+    "speed": "NORMAL",
+    "formation": "WEDGE"
+  }
+]
+01:21:36 [INFO] llm_client: LLM Request (session: arma_session). Text length: 898. Images: 0
+01:21:50 [INFO] llm_client: LLM Response (session: arma_session):
+[
+  {
+    "command": "set_behaviour",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "mode": "AWARE"
+  },
+  {
+    "command": "set_speed_mode",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "speed": "FULL"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "type": "MOVE",
+    "position": [4500, 5200, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "COLUMN"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-1",
+    "type": "SAD",
+    "position": [2747, 5253, 0],
+    "behaviour": "COMBAT",
+    "speed": "NORMAL",
+    "formation": "WEDGE"
+  },
+  {
+    "command": "set_behaviour",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "mode": "AWARE"
+  },
+  {
+    "command": "set_speed_mode",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "speed": "FULL"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "type": "MOVE",
+    "position": [4500, 5600, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "COLUMN"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-2",
+    "type": "SAD",
+    "position": [2675, 5661, 0],
+    "behaviour": "COMBAT",
+    "speed": "NORMAL",
+    "formation": "LINE",
+    "combatMode": "RED"
+  },
+  {
+    "command": "set_behaviour",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "mode": "AWARE"
+  },
+  {
+    "command": "set_speed_mode",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "speed": "FULL"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "type": "MOVE",
+    "position": [4500, 4600, 0],
+    "behaviour": "AWARE",
+    "speed": "FULL",
+    "formation": "COLUMN"
+  },
+  {
+    "command": "add_waypoint",
+    "side": "EAST",
+    "group": "Альфа 1-3",
+    "type": "SAD",
+    "position": [3376, 4567, 0],
+    "behaviour": "COMBAT",
+    "speed": "NORMAL",
+    "formation": "WEDGE"
+  }
+]
