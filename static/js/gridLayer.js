@@ -133,7 +133,7 @@ var GridLayer = L.Layer.extend({
 
   _redraw: function() {
     const conf = Config.get();
-    const ctx = this._canvas.getContext('2d');
+    const ctx = this._canvas.getContext('2d', { willReadFrequently: true });
     const size = this._map.getSize();
     ctx.clearRect(0, 0, size.x, size.y);
 

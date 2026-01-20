@@ -13,59 +13,39 @@ from llm_client import LLMClient
 logger = logging.getLogger("Server") # Используем тот же логгер, что и в server.py
 
 def filter_data_for_llm(full_arma_data: dict, side: str, group_names: list = None) -> list:
-    """
-    Фильтрует полный JSON от Arma, оставляя только необходимые поля для LLM.
+    # Используем наш новый безопасный метод
+    groups_to_process = get_side_data_safe(full_arma_data, side)
     
-    :param full_arma_data: Полный словарь arma_data.
-    :param side: Сторона, для которой нужно отфильтровать данные (напр., "OPFOR").
-    :param group_names: (Опционально) Список имен групп для фильтрации. Если None, берутся все группы.
-    :return: Список отфильтрованных словарей групп.
-    """
-    filtered_groups = []
-    
-    if not full_arma_data or "sides" not in full_arma_data or side not in full_arma_data["sides"]:
+    if not groups_to_process:
+        # Логируем только если данных нет, чтобы понимать контекст
+        # (можно закомментировать, если спамит в лог)
+        # logger.warning(f"Данные для стороны {side} не найдены.") 
         return []
 
-    groups_to_process = full_arma_data["sides"][side]
-    
     # Если указаны конкретные группы, фильтруем их
     if group_names:
         groups_to_process = [g for g in groups_to_process if g.get("n") in group_names]
 
+    filtered_groups = []
     for group in groups_to_process:
-       # 1. Собираем список ВСЕГО оружия (основного и вторичного)
+        # ... (ДАЛЕЕ КОД БЕЗ ИЗМЕНЕНИЙ: подсчет оружия и формирование структуры) ...
         all_weapons = []
         for unit in group.get("u", []):
             primary = unit.get("pw")
             secondary = unit.get("sw")
-            if primary:
-                all_weapons.append(primary)
-            if secondary:
-                all_weapons.append(secondary)
+            if primary: all_weapons.append(primary)
+            if secondary: all_weapons.append(secondary)
         
-        # 2. Считаем количество каждого типа оружия
         weapon_summary = Counter(all_weapons)
         
-        # 3. Собираем итоговый объект группы.
-        #    weapon_summary уже является словарем {'РПГ-7': 1, 'АК-74М': 5},
-        #    поэтому дополнительное форматирование не нужно.
         filtered_group = {
             "n": group.get("n"),
             "p": group.get("p"),
             "c": group.get("c"),
             "co": len(group.get("u", [])),
-            "u_summary": dict(weapon_summary), # Преобразуем Counter в обычный dict
-            "v": [
-                {
-                    "id": v.get("id"),
-                    "vn": v.get("vn"),
-                    "h": v.get("h"),
-                    "p": v.get("p")
-                } 
-                for v in group.get("v", [])
-            ]
+            "u_summary": dict(weapon_summary),
+            "v": [{"id": v.get("id"), "vn": v.get("vn"), "h": v.get("h"), "p": v.get("p")} for v in group.get("v", [])]
         }
-        
         filtered_groups.append(filtered_group)
         
     return filtered_groups
@@ -155,16 +135,19 @@ async def trigger_llm_detection_report(llm_client: LLMClient, assigned_side: str
         logger.warning("Отчет об обнаружении не может быть отправлен: нет данных от Arma.")
         return
 
-    # 2. Извлекаем информацию о нашем отряде-докладчике
+    # 2. ИЩЕМ ДАННЫЕ О ДОКЛАДЧИКЕ (Используем нашу безопасную функцию!)
     reporting_group_name = report.get("g") or report.get("ge")
     reporting_group_data = None
     
-    if reporting_group_name and current_arma_data.get("sides", {}).get(assigned_side):
-        for group in current_arma_data["sides"][assigned_side]:
+    # Получаем список групп стороны безопасным способом
+    side_groups = get_side_data_safe(current_arma_data, assigned_side)
+    
+    if side_groups:
+        for group in side_groups:
             if group.get("n") == reporting_group_name:
                 reporting_group_data = {
                     "name": group.get("n"),
-                    "unit_count": group.get("co", 0) # Используем 'co' как количество юнитов
+                    "unit_count": group.get("co", 0)
                 }
                 break
     
@@ -364,5 +347,31 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
 
     except Exception as e:
         logger.exception(f"Ошибка при отправке сгруппированного отчета в LLM: {e}")
+        
+def get_side_data_safe(full_arma_data: dict, side_name: str) -> list:
+    """
+    Безопасно извлекает список групп для стороны, проверяя все варианты названия
+    (EAST, OPFOR, WEST, BLUFOR и т.д.).
+    """
+    if not full_arma_data or "sides" not in full_arma_data:
+        return []
+
+    # Карта синонимов
+    side_mapping = {
+        "EAST": ["OPFOR", "EAST", "Opfor", "East"],
+        "WEST": ["BLUFOR", "WEST", "Blufor", "West"],
+        "GUER": ["Independent", "GUER", "Guer", "Resistance", "RESISTANCE", "IND"],
+        "CIV": ["CIV", "Civilian", "Civ"]
+    }
+
+    # Получаем список вариантов для запрошенной стороны (например, для "EAST")
+    target_keys = side_mapping.get(side_name.upper(), [side_name])
+    
+    # Ищем, какой ключ реально существует в данных Arma
+    for key in target_keys:
+        if key in full_arma_data["sides"]:
+            return full_arma_data["sides"][key] # Возвращаем данные
+            
+    return [] # Если ничего не нашли
 
 # --- END OF FILE llm_tactical_controller.py ---

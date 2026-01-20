@@ -446,8 +446,16 @@ def reports_stream():
                             markers = report.get("markers", [])
                             
                             async def auto_start_wrapper(m):
-                                logger.info("Автозапуск инициализации LLM по конфигу миссии...")
-                                await asyncio.sleep(1) 
+                                logger.info("Автозапуск: Ждем данные о юнитах перед инициализацией...")
+                                
+                                # Ждем до 10 секунд, пока arma_data не станет доступна
+                                for _ in range(20): # 20 попыток по 0.5 сек = 10 сек
+                                    async with arma_connector.data_lock:
+                                        if arma_connector.arma_data is not None:
+                                            break
+                                    await asyncio.sleep(0.5)
+                                
+                                # Теперь, когда данные (вероятно) есть, запускаем промпт
                                 await send_system_prompt(m)
                                 
                             if arma_loop:
@@ -491,51 +499,53 @@ def reports_stream():
 
 # --- Функция send_system_prompt (принимает markers, async) ---
 async def send_system_prompt(markers: list = None):
-    global system_prompt_sent, llm_client, llm_assigned_side, llm_enemy_side # <<< ДОБАВЛЕН llm_enemy_side
+    global system_prompt_sent, llm_client, llm_assigned_side, llm_enemy_side
     
     if not llm_assigned_side:
-        logger.error("(async) Попытка запустить send_system_prompt без выбранной стороны LLM. Отменено.")
+        logger.error("ОШИБКА: Попытка инициализации без выбранной стороны LLM.")
         return False
 
     if not llm_client or not llm_client.is_operational:
-         logger.error("(async) Невозможно отправить системный промпт: LLM клиент не готов.")
+         logger.error("ОШИБКА: LLM клиент не готов.")
          return False
 
-    # 1. Отправка системного промпта
-    logger.info("(async) Отправка основного системного промпта в LLM...")
-    prompt_response = await llm_client.send_system_prompt("arma_session")
-    
-    if not prompt_response:
-        logger.error("(async) Не удалось отправить основной системный промпт или получен пустой ответ.")
-        await arma_connector.reports_queue.put({
-            "t": "llm_log",
-            "message": "Ошибка: не удалось отправить системный промпт в LLM."
-        })
+    # Получаем текст системного промпта из памяти клиента
+    sys_prompt_text = llm_client.system_prompt
+    if not sys_prompt_text:
+        logger.error("ОШИБКА: Системный промпт пуст.")
         return False
-    
-    await arma_connector.reports_queue.put({"t": "llm_log", "message": "Системный промпт успешно отправлен."})
-    await llm_tactical_controller.handle_llm_response(prompt_response)
-    
-    system_prompt_sent = True
-    logger.info("(async) Основной системный промпт успешно отправлен.")
 
-    # 2. Получаем свежие данные о силах
+    logger.info(f"--- НАЧАЛО ИНИЦИАЛИЗАЦИИ МИССИИ ({llm_assigned_side}) ---")
+
+    # 1. ЦИКЛ ОЖИДАНИЯ ДАННЫХ (FIX)
+    # Ждем до 5 секунд, пока arma_data не перестанет быть None
+    # Это решает проблему, когда start_mission пришел, а updateUnits еще летит по сети
+    logger.info("Ждем данные о войсках от Arma...")
+    data_received = False
+    for i in range(10): # 10 попыток по 0.5 сек = 5 секунд
+        async with arma_connector.data_lock:
+            if arma_connector.arma_data is not None:
+                data_received = True
+                break
+        await asyncio.sleep(0.5)
+
+    if not data_received:
+        logger.error("ВНИМАНИЕ: Тайм-аут ожидания данных о войсках! Отправляем только маркеры.")
+    else:
+        logger.info("Данные о войсках успешно получены.")
+
+    # 2. Получаем и фильтруем данные
     async with arma_connector.data_lock:
         current_arma_data = arma_connector.arma_data
     
+    # Фильтруем данные только для нашей стороны
     filtered_forces = llm_tactical_controller.filter_data_for_llm(current_arma_data, llm_assigned_side)
 
-    # 3. Формируем единое сообщение с маркерами и силами
-    # --- НАЧАЛО ИЗМЕНЕНИЙ: Формируем контекст с учетом сторон ---
-    context_text = f"Initial mission data. You are commanding side: {llm_assigned_side}."
-    if llm_enemy_side:
-        context_text += f" Your primary enemy is: {llm_enemy_side}."
-    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
-
+    # 3. Формируем единый JSON (Маркеры + Силы)
     initial_data_payload = {}
 
+    # -- Добавляем маркеры --
     if markers:
-        logger.info(f"(async) Оптимизируем и добавляем данные о {len(markers)} маркерах в первоначальный отчет.")
         optimized_markers = []
         for m in markers:
             marker_data = {
@@ -543,41 +553,61 @@ async def send_system_prompt(markers: list = None):
                 "p": m.get("pos"),
                 "text": m.get("text"),
             }
+            # Добавляем размер только если он имеет значение
             size = m.get("size")
             if size and (size[0] > 1 or size[1] > 1):
                 marker_data["size"] = size
             optimized_markers.append(marker_data)
         initial_data_payload["mission_markers"] = optimized_markers
-    else:
-        logger.warning("(async) Данные маркеров не предоставлены для первоначального отчета.")
+        logger.info(f"Добавлено маркеров: {len(optimized_markers)}")
 
+    # -- Добавляем силы (ВОТ ЗДЕСЬ ОНИ ПРИКЛЕИВАЮТСЯ) --
     if filtered_forces:
-        logger.info(f"(async) Добавляем данные о {len(filtered_forces)} группах в первоначальный отчет.")
         initial_data_payload["your_forces"] = filtered_forces
+        logger.info(f"Добавлено групп своих войск: {len(filtered_forces)}")
+        # Можно вывести в лог названия групп для проверки
+        group_names = [g.get('n') for g in filtered_forces]
+        logger.debug(f"Список групп: {group_names}")
     else:
-        logger.warning(f"(async) Нет данных о своих силах для первоначального отчета по стороне {llm_assigned_side}.")
+        logger.warning(f"Данные о войсках ПУСТЫ после фильтрации для стороны {llm_assigned_side}!")
 
-    # 4. Отправляем единый отчет, если есть что отправлять
-    if initial_data_payload:
-        try:
-            json_str = json.dumps(initial_data_payload, ensure_ascii=False)
-            full_prompt = f"{context_text}\n{json_str}"
-            
-            logger.info(f"(async) Отправка начальных данных. Сторона: {llm_assigned_side}, Враг: {llm_enemy_side}")
-            response = await llm_client.send_message("arma_session", user_input=full_prompt)
-            await llm_tactical_controller.handle_llm_response(response)
-            
-            await arma_connector.reports_queue.put({
-                "t": "llm_log",
-                "message": f"Миссия инициализирована. Сторона: {llm_assigned_side}. Противник: {llm_enemy_side or 'Неизвестен'}"
-            })
+    # 4. Формируем контекст (Текст заголовка)
+    context_header = f"Initial mission data. You are commanding side: {llm_assigned_side}."
+    if llm_enemy_side:
+        context_header += f" Your primary enemy is: {llm_enemy_side}."
 
-        except Exception as e:
-            logger.exception("(async) Ошибка при отправке данных маркеров и сил в LLM.")
-    else:
-        logger.error("(async) Нет данных ни по маркерам, ни по силам для отправки в LLM.")
+    # 5. Склеиваем всё в одну строку для отправки
+    try:
+        json_str = json.dumps(initial_data_payload, ensure_ascii=False)
+        
+        full_combined_prompt = (
+            f"{sys_prompt_text}\n\n"       # СИСТЕМНАЯ ИНСТРУКЦИЯ
+            f"--- MISSION CONTEXT ---\n"
+            f"{context_header}\n\n"        # КОНТЕКСТ СТОРОН
+            f"--- MISSION DATA JSON ---\n"
+            f"{json_str}"                  # JSON С ДАННЫМИ (МАРКЕРЫ + СИЛЫ)
+        )
+        
+        logger.info(f"Отправка ОБЪЕДИНЕННОГО запроса в LLM ({len(full_combined_prompt)} символов)...")
+        
+        # Отправляем одним сообщением
+        response = await llm_client.send_message("arma_session", user_input=full_combined_prompt)
+        
+        # Обрабатываем ответ
+        await llm_tactical_controller.handle_llm_response(response)
+        
+        system_prompt_sent = True 
+        
+        # Пишем в чат
+        await arma_connector.reports_queue.put({
+            "t": "llm_log",
+            "message": f"Миссия инициализирована. Силы: {len(filtered_forces) if filtered_forces else 0} отрядов."
+        })
+        return True
 
-    return system_prompt_sent
+    except Exception as e:
+        logger.exception("Критическая ошибка при отправке объединенных данных в LLM.")
+        return False
 
 @app.route("/set_roll_call_interval", methods=["POST"])
 def set_roll_call_interval_route():
