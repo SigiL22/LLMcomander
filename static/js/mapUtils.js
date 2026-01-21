@@ -73,7 +73,7 @@ function calculateStrategicParams(p1, p2) {
     // 2. ФИКСИРОВАННЫЙ БУФЕР (в метрах)
     // Добавляем по 2000 метров с каждой стороны.
     // Это гарантирует, что за точкой старта и целью всегда будет 2км карты.
-    const bufferMeters = 1000; 
+    const bufferMeters = 2000; 
 
     // 3. Вычисляем размеры области обзора
     const viewWidth = (maxMissionX - minMissionX) + (bufferMeters * 2);
@@ -92,8 +92,8 @@ function calculateStrategicParams(p1, p2) {
     let rY = Math.ceil((viewHeight / 2) / 100);
 
     // Минимальный размер (на всякий случай, хотя буфер уже дал 20 ячеек)
-    if (rX < 15) rX = 10;
-    if (rY < 15) rY = 10;
+    if (rX < 15) rX = 40;
+    if (rY < 15) rY = 40;
 
     console.log(`[mapUtils] Стратегический расчет: Буфер=${bufferMeters}m. Размер области: ${Math.round(viewWidth)}x${Math.round(viewHeight)}m`);
 

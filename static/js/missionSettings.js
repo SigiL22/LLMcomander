@@ -415,7 +415,7 @@
       rollCallInput.value = window.missionSettings.rollCallInterval;
     });
     batchInput.addEventListener('change', () => {
-      window.missionSettings.llmBatchInterval = Math.max(parseInt(batchInput.value) || 10, 1);
+      window.missionSettings.llmBatchInterval = Math.max(parseInt(batchInput.value) || 20, 1);
       batchInput.value = window.missionSettings.llmBatchInterval;
     });
     sideSelect.addEventListener('change', () => {

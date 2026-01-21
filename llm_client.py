@@ -329,7 +329,7 @@ class LLMClient:
                 return None
 
             # Логируем запрос (текст)
-            logger.info(f"LLM Request (session: {session_id}). Text length: {len(user_input)}. Images: {len(image_paths) if image_paths else 0}")
+            logger.info(f"LLM Request (session: {session_id}). Text length: \n{(user_input)}. \nImages: {len(image_paths) if image_paths else 0}")
 
             answer_text = await self._retry_send_message(chat_session, content_parts)
             

@@ -52,33 +52,84 @@ def filter_data_for_llm(full_arma_data: dict, side: str, group_names: list = Non
 
 async def handle_llm_response(response_text: str):
     """
-    Обрабатывает ответ от LLM: транслирует в чат и пытается выполнить как команду.
+    Обрабатывает ответ от LLM.
+    Поддерживает формат { "reasoning": "...", "commands": [...] }
     """
     if not response_text:
         return
+        
+    # --- НОВОЕ: Очистка от Markdown ---
+    cleaned_text = response_text.strip()
+    
+    # Удаляем ```json в начале
+    if cleaned_text.startswith("```json"):
+        cleaned_text = cleaned_text[7:]
+    elif cleaned_text.startswith("```"):
+        cleaned_text = cleaned_text[3:]
+    
+    # Удаляем ``` в конце
+    if cleaned_text.endswith("```"):
+        cleaned_text = cleaned_text[:-3]
+        
+    cleaned_text = cleaned_text.strip()
+    # ----------------------------------
 
-    # 1. Транслируем сырой ответ в чат для всех пользователей
-    await arma_connector.reports_queue.put({
-        "t": "llm_response",
-        "message": response_text
-    })
-
-    # 2. Пытаемся распарсить и выполнить как команду
+    # 1. Пытаемся распарсить JSON
     try:
-        response_json = json.loads(response_text)
-        if isinstance(response_json, dict) and "command" in response_json:
-            logger.info(f"LLM вернул команду, отправка в Arma: {response_json}")
-            await arma_connector.send_callback_to_arma_async(response_json)
-        elif isinstance(response_json, list):
-             # Отправляем ВЕСЬ список разом как массив JSON. 
-             # Arma получит валидный JSON "[{}, {}]" и сама его разберет.
-             logger.info(f"LLM вернул список из {len(response_json)} команд. Отправка пакетом.")
-             await arma_connector.send_callback_to_arma_async(response_json)
+        response_json = json.loads(cleaned_text) # <-- ИСПОЛЬЗУЕМ CLEANED_TEXT
+    except json.JSONDecodeError as e:
+        logger.error(f"Ответ LLM не является валидным JSON даже после очистки: {e}")
+        logger.debug(f"Raw text: {response_text}")
+        await arma_connector.reports_queue.put({
+            "t": "llm_log",
+            "message": "Ошибка: LLM прислала невалидный JSON (форматирование)."
+        })
+        return
 
-    except json.JSONDecodeError:
-        logger.info("Ответ LLM не является валидным JSON, команда не будет выполнена.")
-    except Exception as e:
-        logger.exception(f"Ошибка при обработке команды от LLM: {e}")
+    # 2. Логика обработки структуры
+    commands_to_send = []
+    reasoning_text = ""
+
+    # СЦЕНАРИЙ А: Новый формат с пояснением
+    if isinstance(response_json, dict) and "commands" in response_json:
+        reasoning_text = response_json.get("reasoning", "")
+        commands_raw = response_json.get("commands", [])
+        
+        if isinstance(commands_raw, list):
+            commands_to_send = commands_raw
+        else:
+            logger.error("Поле 'commands' должно быть списком.")
+
+    # СЦЕНАРИЙ Б: Старый формат (просто список команд)
+    elif isinstance(response_json, list):
+        commands_to_send = response_json
+    
+    # СЦЕНАРИЙ В: Одиночная команда (словарь без ключа commands)
+    elif isinstance(response_json, dict) and "command" in response_json:
+        commands_to_send = [response_json] # Оборачиваем в список
+
+    # 3. Отправляем Пояснение в Чат (Web UI)
+    # Мы используем тип 'llm_log', чтобы оно просто появилось в окне чата у пользователя
+    if reasoning_text:
+        logger.info(f"LLM Reasoning: {reasoning_text}")
+        await arma_connector.reports_queue.put({
+            "t": "llm_log",
+            "message": f"💭 МЫСЛИ: {reasoning_text}"
+        })
+    
+    # Также транслируем полный сырой ответ (опционально, если хотите видеть JSON в чате)
+    # await arma_connector.reports_queue.put({
+    #     "t": "llm_response",
+    #     "message": response_text
+    # })
+
+    # 4. Отправляем Команды в Arma (SQF)
+    if commands_to_send:
+        logger.info(f"Отправка {len(commands_to_send)} команд в Arma.")
+        # Отправляем список целиком (Arma теперь умеет принимать массивы)
+        await arma_connector.send_callback_to_arma_async(commands_to_send)
+    else:
+        logger.warning("В ответе LLM не найдено команд для выполнения.")
 
 
 async def trigger_llm_report(llm_client: LLMClient, assigned_side: str, context_text: str, group_names: list = None):
@@ -255,6 +306,7 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
     """
     Обрабатывает пакет докладов, группирует их по отрядам и отправляет
     единым структурированным запросом в LLM.
+    Дополняет отсутствующие данные (позиция, численность) из глобального состояния arma_data.
     """
     if not llm_client or not llm_client.is_operational:
         logger.warning("Пакетный отчет не может быть отправлен: LLM клиент не готов.")
@@ -263,7 +315,22 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
         logger.info("Пакетный отчет пуст, отправка отменена.")
         return
 
-    # 1. Создаем словарь для группировки докладов по имени отряда
+    # 1. Получаем глобальные данные для обогащения информацией
+    async with arma_connector.data_lock:
+        current_arma_data = arma_connector.arma_data
+
+    # Вспомогательная функция поиска группы в arma_data
+    def find_group_info(g_name, side_name):
+        if not current_arma_data: return None
+        # Используем безопасный поиск стороны
+        side_groups = get_side_data_safe(current_arma_data, side_name)
+        if side_groups:
+            for g in side_groups:
+                if g.get("n") == g_name:
+                    return g
+        return None
+
+    # 2. Создаем словарь для группировки докладов по имени отряда
     grouped_reports = {}
 
     for r in reports:
@@ -273,17 +340,31 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
 
         # Если отряда еще нет в словаре, создаем для него запись
         if group_name not in grouped_reports:
+            # Пытаемся взять данные из репорта
+            pos = r.get("gp")
+            count = r.get("co")
+            
+            # --- FIX: Если данных нет в репорте, ищем в глобальном кэше ---
+            if not pos or not count:
+                cached_group = find_group_info(group_name, assigned_side)
+                if cached_group:
+                    if not pos: pos = cached_group.get("p")
+                    if not count: count = cached_group.get("co") # Или len(cached_group.get('u', []))
+            # -------------------------------------------------------------
+
             grouped_reports[group_name] = {
-                "position": r.get("gp"),  # Текущая позиция группы
-                "unit_count": r.get("co"), # Численность (может быть None для detection)
+                "position": pos,  
+                "unit_count": count,
                 "reports": []
             }
         
-        # Обновляем численность, если она есть в текущем докладе
+        # Обновляем данные, если в текущем репорте они свежее/есть, а в базе нет
         if r.get("co"):
             grouped_reports[group_name]["unit_count"] = r.get("co")
+        if r.get("gp"):
+            grouped_reports[group_name]["position"] = r.get("gp")
 
-        # 2. Формируем компактный объект 'detail' для каждого доклада
+        # 3. Формируем компактный объект 'detail' для каждого доклада
         report_type = r.get("t")
         detail = {"event": report_type}
 
@@ -295,12 +376,11 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
             detail["detected_type"] = "vehicle"
             detail["vehicle_name"] = r.get("vehicle_name") or r.get("vehicle_type")
             detail["position"] = r.get("p")
-            detail["health"] = round(r.get("h", 1.0), 2) # <<< ДОБАВЛЕНО
-        # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+            detail["health"] = round(r.get("h", 1.0), 2)
         elif report_type == "vehicle_abandoned":
             detail["vehicle_name"] = r.get("vehicle_name")
             detail["position"] = r.get("p")
-            detail["health"] = round(r.get("h", 1.0), 2) # <<< ДОБАВЛЕНО
+            detail["health"] = round(r.get("h", 1.0), 2)
         elif report_type == "vehicle_disabled":
             detail["vehicle_name"] = r.get("vehicle_name")
             detail["position"] = r.get("p")
@@ -314,6 +394,9 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
         elif report_type == "vehicle_destroyed":
             detail["vehicle_name"] = r.get("vehicle_name")
             detail["position"] = r.get("p")
+        elif report_type == "waypoint_reached":
+            detail["event"] = "waypoint_completed"
+            detail["position"] = r.get("p")
         
         grouped_reports[group_name]["reports"].append(detail)
 
@@ -321,7 +404,7 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
         logger.info("В пакете не найдено докладов для отправки в LLM.")
         return
 
-    # 3. Преобразуем словарь в итоговый список для JSON
+    # 4. Преобразуем словарь в итоговый список для JSON
     final_payload_list = [
         {
             "reporting_group": name,
@@ -334,12 +417,14 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
     
     summary_payload = {"group_reports": final_payload_list}
 
-    # 4. Отправляем в LLM
+    # 5. Отправляем в LLM
     try:
         context_text = "Consolidated tactical reports from your units. Analyze the situation and issue commands if necessary."
         json_payload_str = json.dumps(summary_payload, ensure_ascii=False)
         full_prompt = f"{context_text}\n{json_payload_str}"
-        logger.info(f"Отправка сгруппированного пакетного отчета в LLM: {json_payload_str}") 
+        
+        logger.info(f"CONTENT of Report: {json_payload_str}") 
+        logger.info(f"Отправка сгруппированного пакетного отчета в LLM ({len(reports)} докладов).")
         
         response = await llm_client.send_message("arma_session", user_input=full_prompt)
         await handle_llm_response(response)
