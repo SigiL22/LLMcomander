@@ -184,19 +184,24 @@ async def _send_message_persistent(writer: StreamWriter | None, host: str, port:
         return None # Сигнализируем о необходимости переподключения
 
 # --- Отправка callback (порт 12347) ---
-async def send_callback_to_arma_async(message: dict | str, host: str = '127.0.0.1'):
+async def send_callback_to_arma_async(message: dict | list | str, host: str = '127.0.0.1'):
     """Асинхронно отправляет callback в Arma на порт 12347."""
     global writer_12347
     try:
-        json_data = json.dumps(message) if isinstance(message, dict) else str(message)
+        # --- ИСПРАВЛЕНИЕ: Корректная сериализация для dict И list ---
+        if isinstance(message, (dict, list)):
+            json_data = json.dumps(message, ensure_ascii=False)
+        else:
+            json_data = str(message)
+        # -----------------------------------------------------------
+        
         encoded_data = json_data.encode('utf-8')
         new_writer = await _send_message_persistent(writer_12347, host, 12347, encoded_data)
         if new_writer:
-             writer_12347 = new_writer # Обновляем глобальный writer
-             #logger.info(f"Callback отправлен в ARMA (12347): {json_data[:100]}...")
+             writer_12347 = new_writer
         else:
-             writer_12347 = None # Сбрасываем writer при ошибке отправки
-             logger.error(f"Не удалось отправить callback в ARMA (12347) из-за ошибки: {json_data[:100]}...")
+             writer_12347 = None
+             logger.error(f"Не удалось отправить callback в ARMA (12347): {json_data[:100]}...")
     except Exception as e:
         logger.exception(f"Критическая ошибка в send_callback_to_arma_async: {e}")
         if writer_12347:

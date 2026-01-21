@@ -70,10 +70,10 @@ async def handle_llm_response(response_text: str):
             logger.info(f"LLM вернул команду, отправка в Arma: {response_json}")
             await arma_connector.send_callback_to_arma_async(response_json)
         elif isinstance(response_json, list):
-             for cmd in response_json:
-                 if isinstance(cmd, dict) and "command" in cmd:
-                     logger.info(f"LLM вернул команду из списка, отправка в Arma: {cmd}")
-                     await arma_connector.send_callback_to_arma_async(cmd)
+             # Отправляем ВЕСЬ список разом как массив JSON. 
+             # Arma получит валидный JSON "[{}, {}]" и сама его разберет.
+             logger.info(f"LLM вернул список из {len(response_json)} команд. Отправка пакетом.")
+             await arma_connector.send_callback_to_arma_async(response_json)
 
     except json.JSONDecodeError:
         logger.info("Ответ LLM не является валидным JSON, команда не будет выполнена.")
@@ -339,8 +339,7 @@ async def trigger_llm_batch_report(llm_client: LLMClient, assigned_side: str, re
         context_text = "Consolidated tactical reports from your units. Analyze the situation and issue commands if necessary."
         json_payload_str = json.dumps(summary_payload, ensure_ascii=False)
         full_prompt = f"{context_text}\n{json_payload_str}"
-        
-        logger.info(f"Отправка сгруппированного пакетного отчета в LLM ({len(reports)} докладов).")
+        logger.info(f"Отправка сгруппированного пакетного отчета в LLM: {json_payload_str}") 
         
         response = await llm_client.send_message("arma_session", user_input=full_prompt)
         await handle_llm_response(response)

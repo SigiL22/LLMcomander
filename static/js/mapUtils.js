@@ -92,8 +92,8 @@ function calculateStrategicParams(p1, p2) {
     let rY = Math.ceil((viewHeight / 2) / 100);
 
     // Минимальный размер (на всякий случай, хотя буфер уже дал 20 ячеек)
-    if (rX < 15) rX = 30;
-    if (rY < 15) rY = 30;
+    if (rX < 15) rX = 10;
+    if (rY < 15) rY = 10;
 
     console.log(`[mapUtils] Стратегический расчет: Буфер=${bufferMeters}m. Размер области: ${Math.round(viewWidth)}x${Math.round(viewHeight)}m`);
 
