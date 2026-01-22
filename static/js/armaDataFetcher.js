@@ -77,12 +77,31 @@ function setupReportsStream() {
             } else if (report.t === "llm_response" && window.llmChat) {
                 console.log("Обработка как llm_response");
                 let responseText = report.message;
+                
+                // --- НОВОЕ: Передаем команды в UnitLayer ---
                 try {
                     const jsonObject = JSON.parse(responseText);
+                    
+                    // Если в ответе есть массив commands, передаем его
+                    if (jsonObject.commands && Array.isArray(jsonObject.commands)) {
+                        console.log("[DataFetcher] Перехват команд LLM для отрисовки:", jsonObject.commands);
+                        if (window.unitLayer && typeof window.unitLayer.processLLMCommands === 'function') {
+                            window.unitLayer.processLLMCommands(jsonObject.commands);
+                        }
+                    }
+                    // Или если это просто массив (старый формат)
+                    else if (Array.isArray(jsonObject)) {
+                         if (window.unitLayer && typeof window.unitLayer.processLLMCommands === 'function') {
+                            window.unitLayer.processLLMCommands(jsonObject);
+                        }
+                    }
+
                     responseText = JSON.stringify(jsonObject, null, 2);
                 } catch (e) {
-                    // ...
+                    // Ошибка парсинга, игнорируем для визуализации
                 }
+                // -------------------------------------------
+
                 window.llmChat.addMessage(`[LLM]:\n${responseText}`);
             }
             // Добавляем в массив только обычные репорты, а не команду start_mission

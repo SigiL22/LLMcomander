@@ -3,10 +3,12 @@
   window.missionSettings = window.missionSettings || {
     updateInterval: 30, // По умолчанию 60 секунд
 	rollCallInterval: 5, // <<< НОВОЕ ПОЛЕ, в минутах
+	llmBatchInterval: 30, // Добавил дефолт, чтобы не было undefined
     llmSide: null,      // Сторона LLM
     preset: null,       // Предустановка (сторона или группа)
     displaySide: null,  // Отображаемая сторона
     llmModel: null,     // Выбранная модель LLM
+	waypointSource: 'game', // <<< ДОБАВЛЕНО: 'game' или 'llm'
     updateSidesData: function(newArmaData) {
       if (newArmaData && newArmaData.sides) {
         // Простое сравнение, чтобы не перерисовывать лишний раз
@@ -335,6 +337,49 @@
     modal.appendChild(modelSelect);
     modal.appendChild(document.createElement('br'));
     modal.appendChild(document.createElement('br'));
+	
+    // --- НОВОЕ: Источник вэйпойнтов ---
+    const wpSourceLabel = document.createElement('label');
+    wpSourceLabel.innerText = "Источник вэйпойнтов:";
+    wpSourceLabel.style.width = "180px";
+    wpSourceLabel.style.display = "inline-block";
+    wpSourceLabel.style.marginBottom = "5px";
+    wpSourceLabel.style.verticalAlign = "middle";
+
+    const wpSourceSelect = document.createElement('select');
+    wpSourceSelect.id = "waypointSource";
+    wpSourceSelect.style.width = "150px";
+    wpSourceSelect.style.marginBottom = "8px";
+    wpSourceSelect.style.verticalAlign = "middle";
+
+    const optGame = document.createElement('option');
+    optGame.value = "game";
+    optGame.text = "Данные из игры (Точно)";
+    if (window.missionSettings.waypointSource === "game") optGame.selected = true;
+
+    const optLlm = document.createElement('option');
+    optLlm.value = "llm";
+    optLlm.text = "Приказы LLM (Быстро)";
+    if (window.missionSettings.waypointSource === "llm") optLlm.selected = true;
+
+    wpSourceSelect.appendChild(optGame);
+    wpSourceSelect.appendChild(optLlm);
+
+    modal.appendChild(wpSourceLabel);
+    modal.appendChild(wpSourceSelect);
+    modal.appendChild(document.createElement('br'));
+    
+    // Обработчик изменения
+    wpSourceSelect.addEventListener('change', () => {
+        window.missionSettings.waypointSource = wpSourceSelect.value;
+        saveSettings();
+        // Перерисовываем слой юнитов сразу, чтобы применить изменения
+        if (window.unitLayer && window.unitLayer._lastData) {
+            window.unitLayer.updateData(window.unitLayer._lastData, []);
+        }
+        console.log("Источник вэйпойнтов изменен на:", window.missionSettings.waypointSource);
+    });
+    // ----------------------------------
 
     // Команды поведения AI
     const commands = [

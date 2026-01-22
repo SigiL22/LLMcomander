@@ -29,7 +29,7 @@ async function performInitialCaptureAndSend() {
     const defenseMarker = markers.find(m => m.text && m.text.toLowerCase().includes(`d-${searchSide}`));
     
     // Настройки радиуса для тактического (детального) снимка
-    const tacticalRadiusMeters = 600; 
+    const tacticalRadiusMeters = 1000; 
     const tacticalRadiusCells = tacticalRadiusMeters / 100;
     
     let snapshots = [];

@@ -36,7 +36,7 @@ var UnitLayer = L.Layer.extend({
         this._lastData = null;
         this.waypointMode = false;
         this.savedReports = JSON.parse(localStorage.getItem('savedReports')) || {};
-        
+        this.predictedWaypoints = {}; // Хранилище: { "GroupName": [wp1, wp2, ...] }  
     },
 
     onAdd: function(map) {
@@ -109,6 +109,57 @@ var UnitLayer = L.Layer.extend({
             }
         }
         localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
+    },
+	
+// Метод для обработки команд напрямую от LLM (минуя задержку Армы)
+    processLLMCommands: function(commands) {
+        if (!Array.isArray(commands)) return;
+
+        commands.forEach(cmd => {
+            const groupName = cmd.group;
+            if (!groupName) return;
+
+            // Инициализируем массив, если нет
+            if (!this.predictedWaypoints[groupName]) {
+                this.predictedWaypoints[groupName] = [];
+            }
+
+            if (cmd.command === "clear_waypoints") {
+                this.predictedWaypoints[groupName] = [];
+                console.log(`[UnitLayer] Очищены предсказанные WP для ${groupName}`);
+            } 
+            else if (cmd.command === "add_waypoint") {
+                // Пытаемся понять позицию (она может быть массивом или строкой)
+                let pos = cmd.position;
+                if (typeof pos === 'string') {
+                    try { pos = JSON.parse(pos); } catch(e) { pos = [0,0,0]; }
+                }
+                
+                // Создаем объект, похожий на структуру из Армы, но проще
+                const wpObj = {
+                    i: this.predictedWaypoints[groupName].length + 1, // Фейковый индекс
+                    t: cmd.type || "MOVE",
+                    p: pos,
+                    b: cmd.behaviour,
+                    cm: cmd.combatMode,
+                    s: cmd.speed,
+                    f: cmd.formation,
+                    isPredicted: true // Флаг, что это предсказание
+                };
+                
+                this.predictedWaypoints[groupName].push(wpObj);
+                console.log(`[UnitLayer] Добавлен предсказанный WP для ${groupName}`, wpObj);
+            }
+        });
+
+        // Если режим отображения включен на LLM, вызываем перерисовку
+        if (window.missionSettings && window.missionSettings.waypointSource === 'llm') {
+             // Вызываем updateData с последними известными данными, 
+             // чтобы перерисовать только маркеры, не теряя позиции юнитов
+             if (this._lastData) {
+                 this.updateData(this._lastData, []); 
+             }
+        }
     },
 
     updateData: function(jsonData, reports = []) {
@@ -232,50 +283,96 @@ var UnitLayer = L.Layer.extend({
                     }
                 }
 
-                if ((!displaySide || displaySide === side) && group.w && group.w.length > 0) {
-                    group.w.forEach(wp => {
-                        if (wp.i === 0) return;
+                let waypointsToDraw = [];
+                const wpSource = window.missionSettings.waypointSource || 'game';
+
+                if (wpSource === 'llm') {
+                    // Берем из локального предсказания
+                    if (this.predictedWaypoints[group.n]) {
+                        waypointsToDraw = this.predictedWaypoints[group.n];
+                    }
+                } else {
+                    // Берем из данных Армы (существующая логика)
+                    if (group.w && group.w.length > 0) {
+                        waypointsToDraw = group.w;
+                    }
+                }
+                
+                // Отрисовка
+                if ((!displaySide || displaySide === side) && waypointsToDraw.length > 0) {
+                    waypointsToDraw.forEach(wp => {
+                        // Для Армы индекс 0 часто это позиция самого бота, пропускаем если это из Армы
+                        if (wpSource === 'game' && wp.i === 0) return; 
+
                         const wpPos = wp.p;
+                        // Проверка валидности координат
+                        if (!wpPos || wpPos.length < 2) return;
+
                         const wpLatLng = gameToLatLng(wpPos[0], wpPos[1], conf);
+                        
                         const wpMessage = {
                             side: side,
                             group: group.n,
                             type: wp.t,
-                            position: JSON.stringify([wpPos[0], wpPos[1], wpPos[2]]),
-                            behaviour: wp.b === "UNCHANGED" ? "" : wp.b,
-                            combatMode: wp.cm === "NO CHANGE" ? "" : wp.cm,
-                            speed: wp.s === "UNCHANGED" ? "" : wp.s,
-                            formation: wp.f === "NO CHANGE" ? "" : wp.f,
+                            position: JSON.stringify([wpPos[0], wpPos[1], (wpPos[2]||0)]),
+                            // ... остальные поля ...
+                            behaviour: wp.b || "",
+                            combatMode: wp.cm || "",
+                            speed: wp.s || "",
+                            formation: wp.f || "",
                             waypointIndex: wp.i
                         };
+
                         let wpIcon;
-                        if (group.cw === wp.i) {
-                            wpIcon = unitIcons[side] ? unitIcons[side].waypointCurrent : unitIcons["OPFOR"].waypointCurrent;
-                        } else if (group.cw - 1 === wp.i) {
-                            wpIcon = unitIcons[side] ? unitIcons[side].waypointReached : unitIcons["OPFOR"].waypointReached;
+                        // Логика иконок (текущий/пройденный) работает хорошо только для 'game' mode,
+                        // т.к. LLM не знает, дошел бот или нет. 
+                        // Для 'llm' mode все точки будем рисовать как "Unreached" или "Current"
+                        if (wpSource === 'game') {
+                            if (group.cw === wp.i) {
+                                wpIcon = unitIcons[side] ? unitIcons[side].waypointCurrent : unitIcons["OPFOR"].waypointCurrent;
+                            } else if (group.cw - 1 === wp.i) {
+                                wpIcon = unitIcons[side] ? unitIcons[side].waypointReached : unitIcons["OPFOR"].waypointReached;
+                            } else {
+                                wpIcon = unitIcons[side] ? unitIcons[side].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
+                            }
                         } else {
-                            wpIcon = unitIcons[side] ? unitIcons[side].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
+                            // Для LLM режима рисуем как "планируемые" (unreached)
+                             wpIcon = unitIcons[side] ? unitIcons[side].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
                         }
+
+                        // ... (Далее старый код создания маркера) ...
                         const marker = L.marker(wpLatLng, { icon: wpIcon });
                         marker.options.data = { 
                             group: group.n, 
                             waypointIndex: wp.i, 
                             params: wpMessage 
                         };
+                        
+                        // Тултип
+                        let statusText = "";
+                        if (wpSource === 'game') {
+                             statusText = group.cw - 1 === wp.i ? '<br><b>Достигнут</b>' : group.cw === wp.i ? '<br><b>Текущий</b>' : '';
+                        } else {
+                             statusText = '<br><i>(План LLM)</i>';
+                        }
+
                         const tooltipContent = `
                             Тип: ${wp.t || "N/A"}<br>
                             Поведение: ${wp.b || "N/A"}<br>
                             Боевой режим: ${wp.cm || "N/A"}<br>
                             Скорость: ${wp.s || "N/A"}<br>
                             Строй: ${wp.f || "N/A"}<br>
-                            Индекс: ${wp.i}${group.cw - 1 === wp.i ? '<br><b>Достигнут</b>' : group.cw === wp.i ? '<br><b>Текущий</b>' : ''}
+                            Индекс: ${wp.i}${statusText}
                         `;
                         marker.bindTooltip(tooltipContent, { direction: 'top', offset: [0, -15] });
+                        
+                        // ... добавление на карту ...
                         if (this.waypointMode && window.waypointEditor && typeof window.waypointEditor.onWaypointDoubleClick === 'function') {
                             marker.on('dblclick', window.waypointEditor.onWaypointDoubleClick);
                         }
                         marker.addTo(this._waypointLayer);
 
+                        // Лейбл
                         L.marker(wpLatLng, {
                             icon: L.divIcon({
                                 html: `<div class="group-label">${group.n} #${wp.i}</div>`,

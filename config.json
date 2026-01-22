@@ -1,5 +1,5 @@
 {
     "geminy_api_key": "AIzaasdasfsa2322dsadCn7gOXyn4",
     "base_url": "https://gateway.ai.cloudflare.com/v1/bd9e46963aa412fee85055e131e47dc8/geminy/google-ai-studio",
-    "model": "gemini-3-flash-preview"
+    "model": "gemini-3-pro-preview"
 }
