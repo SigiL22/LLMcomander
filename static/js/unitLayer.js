@@ -73,11 +73,11 @@ var UnitLayer = L.Layer.extend({
             if (report.command === "start_mission") { 
                 this.savedReports = {};
                 localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
-                // this.startMissionProcessed = true; // <-- Удаляем эту строку
                 this._reportGroupLayer.clearLayers();
                 this._reportVehicleLayer.clearLayers();
                 console.log("Получена команда start_mission, сохраненные репорты и маркеры очищены");
-                return; // Прерываем дальнейшую обработку этого пакета
+                this.predictedWaypoints = {}; // Очищаем предсказания при рестарте
+                return; 
             } else if (report.t === "enemy_detected") {
                 const groupId = report.ge || "unknown";
                 this.savedReports[groupId] = report;
@@ -92,7 +92,6 @@ var UnitLayer = L.Layer.extend({
                     if (savedReport.t === "enemy_detected") {
                         if (savedReport.g === groupName) {
                             delete this.savedReports[key];
-                            console.log(`Удален репорт enemy_detected от группы ${groupName} для ${key} (по группе)`);
                         } else if (clearedPos) {
                             const enemyPos = savedReport.p;
                             const distance = Math.sqrt(
@@ -101,7 +100,6 @@ var UnitLayer = L.Layer.extend({
                             );
                             if (distance < 200) {
                                 delete this.savedReports[key];
-                                console.log(`Удален репорт enemy_detected для ${key} группой ${groupName} на расстоянии ${distance} м`);
                             }
                         }
                     }
@@ -110,14 +108,14 @@ var UnitLayer = L.Layer.extend({
         }
         localStorage.setItem('savedReports', JSON.stringify(this.savedReports));
     },
-	
-// Метод для обработки команд напрямую от LLM (минуя задержку Армы)
+    
+    // Метод для обработки команд напрямую от LLM (минуя задержку Армы)
     processLLMCommands: function(commands) {
         if (!Array.isArray(commands)) return;
 
         commands.forEach(cmd => {
-            const groupName = cmd.group;
-            if (!groupName) return;
+            if (!cmd.group) return;
+            const groupName = cmd.group.trim(); // Убираем лишние пробелы
 
             // Инициализируем массив, если нет
             if (!this.predictedWaypoints[groupName]) {
@@ -126,7 +124,7 @@ var UnitLayer = L.Layer.extend({
 
             if (cmd.command === "clear_waypoints") {
                 this.predictedWaypoints[groupName] = [];
-                console.log(`[UnitLayer] Очищены предсказанные WP для ${groupName}`);
+                //console.log(`[UnitLayer] Очищены предсказанные WP для ${groupName}`);
             } 
             else if (cmd.command === "add_waypoint") {
                 // Пытаемся понять позицию (она может быть массивом или строкой)
@@ -135,7 +133,7 @@ var UnitLayer = L.Layer.extend({
                     try { pos = JSON.parse(pos); } catch(e) { pos = [0,0,0]; }
                 }
                 
-                // Создаем объект, похожий на структуру из Армы, но проще
+                // Создаем объект, похожий на структуру из Армы
                 const wpObj = {
                     i: this.predictedWaypoints[groupName].length + 1, // Фейковый индекс
                     t: cmd.type || "MOVE",
@@ -144,18 +142,16 @@ var UnitLayer = L.Layer.extend({
                     cm: cmd.combatMode,
                     s: cmd.speed,
                     f: cmd.formation,
-                    isPredicted: true // Флаг, что это предсказание
+                    isPredicted: true 
                 };
                 
                 this.predictedWaypoints[groupName].push(wpObj);
-                console.log(`[UnitLayer] Добавлен предсказанный WP для ${groupName}`, wpObj);
+                //console.log(`[UnitLayer] Добавлен предсказанный WP для ${groupName}`, wpObj);
             }
         });
 
         // Если режим отображения включен на LLM, вызываем перерисовку
         if (window.missionSettings && window.missionSettings.waypointSource === 'llm') {
-             // Вызываем updateData с последними известными данными, 
-             // чтобы перерисовать только маркеры, не теряя позиции юнитов
              if (this._lastData) {
                  this.updateData(this._lastData, []); 
              }
@@ -164,8 +160,9 @@ var UnitLayer = L.Layer.extend({
 
     updateData: function(jsonData, reports = []) {
         if (JSON.stringify(jsonData) === JSON.stringify(this._lastData) && reports.length === 0) {
-            console.log("Данные не изменились, пропускаем обновление");
-            return;
+            // console.log("Данные не изменились, пропускаем обновление");
+            // Можно раскомментировать return, но для отладки WP лучше оставить проход
+            // return; 
         }
         this._lastData = jsonData;
 
@@ -187,7 +184,15 @@ var UnitLayer = L.Layer.extend({
             sideData.forEach(group => {
                 const groupPos = group.p;
                 const groupLatLng = gameToLatLng(groupPos[0], groupPos[1], conf);
-                const groupIcon = unitIcons[side] ? unitIcons[side].infantry : unitIcons["OPFOR"].infantry;
+                
+                // --- FIX: Правильный маппинг сторон для иконок ---
+                let iconKey = "OPFOR"; // Fallback
+                if (side === "WEST" || side === "BLUFOR") iconKey = "BLUFOR";
+                if (side === "EAST" || side === "OPFOR" || side === "GUER") iconKey = "OPFOR";
+
+                const groupIcon = unitIcons[iconKey] ? unitIcons[iconKey].infantry : unitIcons["OPFOR"].infantry;
+                // -------------------------------------------------
+
                 const groupTooltip = `
                     <b>${group.n}</b><br>
                     Командир: ${group.c}<br>
@@ -238,7 +243,7 @@ var UnitLayer = L.Layer.extend({
                         group.v.forEach(vehicle => {
                             const vehPos = vehicle.p;
                             const vehLatLng = gameToLatLng(vehPos[0], vehPos[1], conf);
-                            const vehIcon = unitIcons[side] ? unitIcons[side].vehicle : unitIcons["OPFOR"].vehicle;
+                            const vehIcon = unitIcons[iconKey] ? unitIcons[iconKey].vehicle : unitIcons["OPFOR"].vehicle;
                             let vehTooltip = `
                                 <b>${vehicle.vn}</b><br>
                                 ID: ${vehicle.id}<br>
@@ -283,30 +288,33 @@ var UnitLayer = L.Layer.extend({
                     }
                 }
 
+                // --- ЛОГИКА ОТРИСОВКИ ВЭЙПОЙНТОВ ---
                 let waypointsToDraw = [];
                 const wpSource = window.missionSettings.waypointSource || 'game';
 
                 if (wpSource === 'llm') {
-                    // Берем из локального предсказания
-                    if (this.predictedWaypoints[group.n]) {
-                        waypointsToDraw = this.predictedWaypoints[group.n];
+                    // Используем trim(), чтобы избежать проблем с пробелами
+                    const safeName = group.n ? group.n.trim() : "";
+                    if (this.predictedWaypoints[safeName]) {
+                        waypointsToDraw = this.predictedWaypoints[safeName];
+                        // console.log(`[Draw] Рисуем LLM WP для ${safeName}:`, waypointsToDraw.length);
                     }
                 } else {
-                    // Берем из данных Армы (существующая логика)
                     if (group.w && group.w.length > 0) {
                         waypointsToDraw = group.w;
                     }
                 }
                 
-                // Отрисовка
                 if ((!displaySide || displaySide === side) && waypointsToDraw.length > 0) {
                     waypointsToDraw.forEach(wp => {
-                        // Для Армы индекс 0 часто это позиция самого бота, пропускаем если это из Армы
+                        // Для 'game' режима пропускаем 0-й индекс (обычно это сам юнит)
                         if (wpSource === 'game' && wp.i === 0) return; 
 
                         const wpPos = wp.p;
-                        // Проверка валидности координат
-                        if (!wpPos || wpPos.length < 2) return;
+                        if (!wpPos || wpPos.length < 2) {
+                            console.warn("Invalid WP pos:", wpPos);
+                            return;
+                        }
 
                         const wpLatLng = gameToLatLng(wpPos[0], wpPos[1], conf);
                         
@@ -315,7 +323,6 @@ var UnitLayer = L.Layer.extend({
                             group: group.n,
                             type: wp.t,
                             position: JSON.stringify([wpPos[0], wpPos[1], (wpPos[2]||0)]),
-                            // ... остальные поля ...
                             behaviour: wp.b || "",
                             combatMode: wp.cm || "",
                             speed: wp.s || "",
@@ -324,23 +331,20 @@ var UnitLayer = L.Layer.extend({
                         };
 
                         let wpIcon;
-                        // Логика иконок (текущий/пройденный) работает хорошо только для 'game' mode,
-                        // т.к. LLM не знает, дошел бот или нет. 
-                        // Для 'llm' mode все точки будем рисовать как "Unreached" или "Current"
+                        // Выбираем иконку. Если режим LLM - всегда используем "Unreached"
                         if (wpSource === 'game') {
                             if (group.cw === wp.i) {
-                                wpIcon = unitIcons[side] ? unitIcons[side].waypointCurrent : unitIcons["OPFOR"].waypointCurrent;
+                                wpIcon = unitIcons[iconKey] ? unitIcons[iconKey].waypointCurrent : unitIcons["OPFOR"].waypointCurrent;
                             } else if (group.cw - 1 === wp.i) {
-                                wpIcon = unitIcons[side] ? unitIcons[side].waypointReached : unitIcons["OPFOR"].waypointReached;
+                                wpIcon = unitIcons[iconKey] ? unitIcons[iconKey].waypointReached : unitIcons["OPFOR"].waypointReached;
                             } else {
-                                wpIcon = unitIcons[side] ? unitIcons[side].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
+                                wpIcon = unitIcons[iconKey] ? unitIcons[iconKey].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
                             }
                         } else {
-                            // Для LLM режима рисуем как "планируемые" (unreached)
-                             wpIcon = unitIcons[side] ? unitIcons[side].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
+                             // Для LLM режима
+                             wpIcon = unitIcons[iconKey] ? unitIcons[iconKey].waypointUnreached : unitIcons["OPFOR"].waypointUnreached;
                         }
 
-                        // ... (Далее старый код создания маркера) ...
                         const marker = L.marker(wpLatLng, { icon: wpIcon });
                         marker.options.data = { 
                             group: group.n, 
@@ -348,13 +352,9 @@ var UnitLayer = L.Layer.extend({
                             params: wpMessage 
                         };
                         
-                        // Тултип
-                        let statusText = "";
-                        if (wpSource === 'game') {
-                             statusText = group.cw - 1 === wp.i ? '<br><b>Достигнут</b>' : group.cw === wp.i ? '<br><b>Текущий</b>' : '';
-                        } else {
-                             statusText = '<br><i>(План LLM)</i>';
-                        }
+                        let statusText = wpSource === 'game' 
+                            ? (group.cw - 1 === wp.i ? '<br><b>Достигнут</b>' : group.cw === wp.i ? '<br><b>Текущий</b>' : '')
+                            : '<br><i>(План LLM)</i>';
 
                         const tooltipContent = `
                             Тип: ${wp.t || "N/A"}<br>
@@ -366,13 +366,11 @@ var UnitLayer = L.Layer.extend({
                         `;
                         marker.bindTooltip(tooltipContent, { direction: 'top', offset: [0, -15] });
                         
-                        // ... добавление на карту ...
                         if (this.waypointMode && window.waypointEditor && typeof window.waypointEditor.onWaypointDoubleClick === 'function') {
                             marker.on('dblclick', window.waypointEditor.onWaypointDoubleClick);
                         }
                         marker.addTo(this._waypointLayer);
 
-                        // Лейбл
                         L.marker(wpLatLng, {
                             icon: L.divIcon({
                                 html: `<div class="group-label">${group.n} #${wp.i}</div>`,
@@ -388,27 +386,19 @@ var UnitLayer = L.Layer.extend({
 
         this.updateReports(reports);
 		
-        // Автозапуск LLM, когда пришли первые данные о войсках
+        // Автозапуск LLM (без изменений)
         if (window.missionSettings && window.missionSettings.llmSide && !window.hasCapturedInitialSnapshots) {
             const mySideKey = window.missionSettings.llmSide; 
-            console.log(`[UnitLayer] Проверка автозапуска. Сторона: ${mySideKey}`);
-
-            // Надежный поиск данных стороны (учитывая OPFOR/EAST/WEST/BLUFOR)
             let sideData = null;
             const sidesObj = jsonData.sides;
             
-            // 1. Прямое совпадение
             if (sidesObj[mySideKey]) {
                 sideData = sidesObj[mySideKey];
-            } 
-            // 2. Перебор синонимов (если прямого нет)
-            else {
+            } else {
                 if ((mySideKey === "EAST" || mySideKey === "OPFOR") && (sidesObj["OPFOR"] || sidesObj["EAST"])) 
                     sideData = sidesObj["OPFOR"] || sidesObj["EAST"];
-                
                 else if ((mySideKey === "WEST" || mySideKey === "BLUFOR") && (sidesObj["BLUFOR"] || sidesObj["WEST"])) 
                     sideData = sidesObj["BLUFOR"] || sidesObj["WEST"];
-                
                 else if ((mySideKey === "GUER" || mySideKey === "Independent") && (sidesObj["Independent"] || sidesObj["GUER"])) 
                     sideData = sidesObj["Independent"] || sidesObj["GUER"];
             }
@@ -416,27 +406,18 @@ var UnitLayer = L.Layer.extend({
             if (sideData && sideData.length > 0) {
                 console.log("[UnitLayer] Первые данные о войсках получены! Запуск авто-захвата через 2 сек...");
                 window.hasCapturedInitialSnapshots = true; 
-                
                 setTimeout(() => {
                     if (typeof performInitialCaptureAndSend === 'function') {
                         performInitialCaptureAndSend();
-                    } else {
-                        console.error("[UnitLayer] Функция performInitialCaptureAndSend не найдена!");
                     }
                 }, 2000);
-            } else {
-                // Лог для отладки, если данные не найдены
-                console.log(`[UnitLayer] Данные для стороны ${mySideKey} пока не найдены или пусты. Доступные ключи:`, Object.keys(sidesObj));
             }
         }
-        // ---------------------------
     },
 
 
     updateReports: function(reports) {
-        console.log("Получены репорты:", reports);
         if (!window.missionSettings) {
-            console.log("missionSettings еще не загружен, пропускаем отрисовку репортов");
             return;
         }
         const displaySide = window.missionSettings.displaySide || "";
@@ -450,34 +431,37 @@ var UnitLayer = L.Layer.extend({
 
         Object.values(this.savedReports).forEach(report => {
             const enemySide = report.se || "UNKNOWN";
-            const armaEnemySide = enemySide === "EAST" ? "OPFOR" : enemySide === "WEST" ? "BLUFOR" : enemySide;
+            // Используем маппинг для иконок отчетов
+            let reportIconKey = "OPFOR";
+            if (enemySide === "WEST" || enemySide === "BLUFOR") reportIconKey = "BLUFOR";
+            
+            // Логика фильтрации отображения
+            // Показываем, если не задан фильтр ИЛИ если это не моя сторона (т.е. это враг)
             if (armaDisplaySide && armaDisplaySide !== enemySide) {
-                const markerSide = armaDisplaySide === "EAST" ? "BLUFOR" : "OPFOR";
+                // Иконка должна соответствовать стороне обнаруженного врага
+                
                 if (report.t === "enemy_detected") {
                     const groupId = report.ge || "unknown";
-                    const unitCount = report.ce || '?'; // Используем '?' если количество неизвестно
+                    const unitCount = report.ce || '?'; 
                     const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
-                    const enemyIcon = unitIcons[markerSide].infantry;
+                    const enemyIcon = unitIcons[reportIconKey] ? unitIcons[reportIconKey].infantry : unitIcons["OPFOR"].infantry;
+                    
                     const enemyTooltip = `
                         <b>Обнаружена пехота</b><br> 
                         Сторона: ${enemySide}<br>
                         Количество: ~${unitCount}<br>
-                        Точность доклада: ${report.acc} м
+                        Точность: ${report.acc} м
                     `;
                     const enemyMarker = L.marker(enemyLatLng, { 
                         icon: enemyIcon,
-                        data: { side: enemySide, group: groupId } // group ID оставляем во внутренних данных
+                        data: { side: enemySide, group: groupId } 
                     }).addTo(this._reportGroupLayer);
-                    enemyMarker.bindTooltip(enemyTooltip, { 
-                        direction: 'top', 
-                        offset: [0, -15], 
-                        className: 'group-tooltip'
-                    });
+                    enemyMarker.bindTooltip(enemyTooltip, { direction: 'top', offset: [0, -15], className: 'group-tooltip' });
 
                     L.marker(enemyLatLng, {
                         icon: L.divIcon({
                             html: `<div class="group-label">(${unitCount})</div>`,
-                            className: 'label-marker enemy-report', // Добавим класс для возможной стилизации
+                            className: 'label-marker enemy-report',
                             iconSize: [100, 20],
                             iconAnchor: [50, -15]
                         })
@@ -485,7 +469,7 @@ var UnitLayer = L.Layer.extend({
                 } else if (report.t === "vehicle_detected") {
                     const vehicleId = report.id;
                     const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
-                    const vehIcon = unitIcons[markerSide].vehicle;
+                    const vehIcon = unitIcons[reportIconKey] ? unitIcons[reportIconKey].vehicle : unitIcons["OPFOR"].vehicle;
                     const vehTooltip = `
                         <b>${report.vehicle_name || report.vehicle_type}</b><br>
                         ID: ${vehicleId}<br>
@@ -496,11 +480,7 @@ var UnitLayer = L.Layer.extend({
                         icon: vehIcon,
                         data: { side: enemySide, vehicleId: vehicleId }
                     }).addTo(this._reportVehicleLayer);
-                    vehMarker.bindTooltip(vehTooltip, { 
-                        direction: 'top', 
-                        offset: [0, -15], 
-                        className: 'vehicle-tooltip'
-                    });
+                    vehMarker.bindTooltip(vehTooltip, { direction: 'top', offset: [0, -15], className: 'vehicle-tooltip' });
 
                     L.marker(enemyLatLng, {
                         icon: L.divIcon({
@@ -513,7 +493,7 @@ var UnitLayer = L.Layer.extend({
                 } else if (report.t === "vehicle_destroyed") {
                     const vehicleId = report.id;
                     const enemyLatLng = gameToLatLng(report.p[0], report.p[1], conf);
-                    const vehIcon = unitIcons[markerSide].vehicleDestroyed;
+                    const vehIcon = unitIcons[reportIconKey] ? unitIcons[reportIconKey].vehicleDestroyed : unitIcons["OPFOR"].vehicleDestroyed;
                     const vehTooltip = `
                         <b>${report.vehicle_name || report.vehicle_type}</b> (уничтожена)<br>
                         ID: ${vehicleId}<br>
@@ -523,11 +503,7 @@ var UnitLayer = L.Layer.extend({
                         icon: vehIcon,
                         data: { side: enemySide, vehicleId: vehicleId }
                     }).addTo(this._reportVehicleLayer);
-                    vehMarker.bindTooltip(vehTooltip, { 
-                        direction: 'top', 
-                        offset: [0, -15], 
-                        className: 'vehicle-tooltip destroyed'
-                    });
+                    vehMarker.bindTooltip(vehTooltip, { direction: 'top', offset: [0, -15], className: 'vehicle-tooltip destroyed' });
 
                     L.marker(enemyLatLng, {
                         icon: L.divIcon({
@@ -545,51 +521,19 @@ var UnitLayer = L.Layer.extend({
 
 window.unitLayer = new UnitLayer();
 
+// Стили (без изменений)
 const style = document.createElement('style');
 style.innerHTML = `
-    .label-marker {
-        background: none;
-    }
-    .group-label, .vehicle-label {
-        width: 100px;
-        text-align: center;
-        font-size: 12px;
-        color: #000;
-        background: none;
-        border: none;
-        padding: 0;
-    }
-    .vehicle-label {
-        line-height: 1.2;
-    }
-    .group-tooltip, .vehicle-tooltip {
-        font-size: 12px;
-        background-color: rgba(255, 255, 255, 0.9);
-        border: 1px solid #ccc;
-    }
-    .vehicle-tooltip.destroyed {
-        background-color: rgba(255, 0, 0, 0.9);
-        color: #fff;
-    }
-    .label-marker.destroyed {
-        color: #ff0000;
-    }
-    .vehicle-destroyed {
-        filter: grayscale(100%) opacity(0.7);
-    }
-    .waypoint-opfor-current {
-        filter: hue-rotate(0deg) saturate(3) brightness(1.2);
-    }
-    .waypoint-opfor-reached, .waypoint-opfor-unreached {
-        filter: hue-rotate(0deg) saturate(3) brightness(1.2);
-        opacity: 0.33;
-    }
-    .waypoint-blufor-current {
-        filter: hue-rotate(220deg) saturate(3) brightness(1.2);
-    }
-    .waypoint-blufor-reached, .waypoint-blufor-unreached {
-        filter: hue-rotate(220deg) saturate(3) brightness(1.2);
-        opacity: 0.33;
-    }
+    .label-marker { background: none; }
+    .group-label, .vehicle-label { width: 100px; text-align: center; font-size: 12px; color: #000; background: none; border: none; padding: 0; }
+    .vehicle-label { line-height: 1.2; }
+    .group-tooltip, .vehicle-tooltip { font-size: 12px; background-color: rgba(255, 255, 255, 0.9); border: 1px solid #ccc; }
+    .vehicle-tooltip.destroyed { background-color: rgba(255, 0, 0, 0.9); color: #fff; }
+    .label-marker.destroyed { color: #ff0000; }
+    .vehicle-destroyed { filter: grayscale(100%) opacity(0.7); }
+    .waypoint-opfor-current { filter: hue-rotate(0deg) saturate(3) brightness(1.2); }
+    .waypoint-opfor-reached, .waypoint-opfor-unreached { filter: hue-rotate(0deg) saturate(3) brightness(1.2); opacity: 0.33; }
+    .waypoint-blufor-current { filter: hue-rotate(220deg) saturate(3) brightness(1.2); }
+    .waypoint-blufor-reached, .waypoint-blufor-unreached { filter: hue-rotate(220deg) saturate(3) brightness(1.2); opacity: 0.33; }
 `;
 document.head.appendChild(style);

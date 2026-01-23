@@ -8,7 +8,7 @@
     preset: null,       // Предустановка (сторона или группа)
     displaySide: null,  // Отображаемая сторона
     llmModel: null,     // Выбранная модель LLM
-	waypointSource: 'game', // <<< ДОБАВЛЕНО: 'game' или 'llm'
+	waypointSource: 'llm', // <<< ДОБАВЛЕНО: 'game' или 'llm'
     updateSidesData: function(newArmaData) {
       if (newArmaData && newArmaData.sides) {
         // Простое сравнение, чтобы не перерисовывать лишний раз

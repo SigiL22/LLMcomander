@@ -86,7 +86,7 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
 
     const tileLayer = L.tileLayer('http://localhost:5000/tiles/{z}/{x}/{y}.png', {
       noWrap: true,
-      tileBuffer: 10, // <--- УВЕЛИЧЕНО С 2 ДО 10: Грузим больше тайлов вокруг, чтобы не было серых краев
+      tileBuffer: 10, 
       maxNativeZoom: 7,
       maxZoom: MAX_ZOOM,
       bounds: [[-32768, -32768], [32768, 32768]],
@@ -118,7 +118,6 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
 
     // 5. Улучшенная логика ожидания
     const tryCapture = () => {
-        // Проверяем, грузит ли еще Leaflet тайлы
         if (tileLayer.isLoading()) {
             console.log("[captureMapArea] Leaflet все еще грузит тайлы. Ждем...");
             setTimeout(tryCapture, 500);
@@ -129,7 +128,7 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
         
         html2canvas(hiddenContainer, {
           useCORS: true,
-          allowTaint: true, // Разрешаем "грязный" канвас (локально это ок)
+          allowTaint: true, 
           onclone: (clonedDoc) => {
             const hiddenMapElement = clonedDoc.querySelector('.leaflet-container');
             if (hiddenMapElement) {
@@ -175,7 +174,13 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
               })
               .then(res => res.json())
               .then(buildings => {
-                  const bJson = buildings.map(b => ({ i: b.id, n: b.name, p: [b.x, b.y, b.z], in: b.interior }));
+                  // --- ИЗМЕНЕНИЕ: Убрали ID из JSON ---
+                  const bJson = buildings.map(b => ({ 
+                      n: b.name, 
+                      p: [b.x, b.y, b.z], 
+                      in: b.interior 
+                  }));
+                  // ------------------------------------
                   const fn = "buildings_" + jsonBaseName + ".json";
                   return fetch('/save_json', {
                       method: 'POST',
@@ -194,7 +199,13 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
           })
           .then(res => res.json())
           .then(names => {
-              const nJson = names.map(n => ({ i: n.id, n: n.name, t: n.type, p: [n.x, n.y] }));
+              // --- ИЗМЕНЕНИЕ: Убрали ID из JSON ---
+              const nJson = names.map(n => ({ 
+                  n: n.name, 
+                  t: n.type, 
+                  p: [n.x, n.y] 
+              }));
+              // ------------------------------------
               const fn = "names_" + jsonBaseName + ".json";
               return fetch('/save_json', {
                   method: 'POST',
@@ -255,14 +266,11 @@ function captureMapArea(targetCellX, targetCellY, regionSizeX, regionSizeY, show
         });
     };
 
-    // Запускаем процесс ожидания загрузки
     tileLayer.on('load', function() {
         console.log("[captureMapArea] Событие load сработало. Старт безопасного ожидания...");
-        // Ждем 4 секунды (надежный запас для больших карт) + проверка isLoading
         setTimeout(tryCapture, 4000); 
     });
 
-    // Watchdog (увеличен до 30 сек для больших карт)
     setTimeout(() => {
         if (!offscreenMap._loaded && document.body.contains(hiddenContainer)) {
             console.error("[captureMapArea] Watchdog timeout.");
@@ -332,7 +340,7 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
         <title>Map Preview</title>
 		<link rel="stylesheet" href="/static/leaflet/leaflet.css" />
         <script src="/static/leaflet/leaflet.js"></script>
-        <script src="/static/html2canvas/html2canvas.min.js"></script> <!-- Локальный html2canvas -->
+        <script src="/static/html2canvas/html2canvas.min.js"></script>
         <script src="js/config.js"></script>
         <script src="js/gameToLatLng.js"></script>
         <script src="js/gridLayer.js"></script>
@@ -388,7 +396,6 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
           Config.apply();
           setTimeout(() => gridLayer._redraw && gridLayer._redraw(), 100);
 
-          // Получаем данные юнитов через /arma_data
           fetch('http://localhost:5000/arma_data')
             .then(response => response.json())
             .then(data => {
@@ -412,7 +419,6 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
             })
             .catch(err => logToParent('Ошибка получения данных:', err));
 
-          // Получаем данные зданий и названий из базы
           const area = { minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY} };
           fetch('http://localhost:5000/get_buildings', {
             method: 'POST',
@@ -422,7 +428,6 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
             .then(response => response.json())
             .then(buildings => {
               const buildingsJson = buildings.map(b => ({
-                i: b.id,
                 n: b.name,
                 p: [b.x, b.y, b.z],
                 in: b.interior
@@ -443,7 +448,6 @@ function openMapWindow(xxx, yyy, m, showCellLabels = false, sides = []) {
 			  .then(response => response.json())
 			  .then(names => {
 				const namesJson = names.map(n => ({
-				  i: n.id,
 				  n: n.name,
 				  t: n.type,
 				  p: [n.x, n.y]

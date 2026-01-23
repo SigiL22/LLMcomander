@@ -102,7 +102,7 @@ async function performInitialCaptureAndSend() {
                 { x: attackMarker.pos[0], y: attackMarker.pos[1] }
             );
             
-            console.log("[AutoCapture] Параметры стратегического снимка:", stratParams);
+            //console.log("[AutoCapture] Параметры стратегического снимка:", stratParams);
             
             // Ограничитель: если карта получается больше 5x5 км (50 ячеек радиус),
             // лучше ограничить, иначе ничего не будет видно.
@@ -111,7 +111,7 @@ async function performInitialCaptureAndSend() {
             // if (stratParams.regionSizeY > 25) stratParams.regionSizeY = 25;
 
 			try {
-                console.log("[AutoCapture] Снимаем общий план...");
+                //console.log("[AutoCapture] Снимаем общий план...");
                 
                 // 1. Генерируем имя файла ЗАРАНЕЕ
                 const stratFilename = `snap_attack_strat_${Date.now()}.png`;
@@ -162,7 +162,7 @@ async function performInitialCaptureAndSend() {
             return; // Не запускаем LLM, если загрузка упала (или запускаем? Решать вам. Лучше не запускать, чтобы не рассинхронить)
         }
     } else {
-        console.log("[AutoCapture] Снимков нет. Запускаем LLM только на текстовых данных.");
+        //console.log("[AutoCapture] Снимков нет. Запускаем LLM только на текстовых данных.");
     }
 
     // 3. Финальный пинок: Запуск инициализации LLM

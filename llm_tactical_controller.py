@@ -126,8 +126,20 @@ async def handle_llm_response(response_text: str):
     # 4. Отправляем Команды в Arma (SQF)
     if commands_to_send:
         logger.info(f"Отправка {len(commands_to_send)} команд в Arma.")
-        # Отправляем список целиком (Arma теперь умеет принимать массивы)
+        # Отправляем список целиком в Арму
         await arma_connector.send_callback_to_arma_async(commands_to_send)
+        
+        # --- НОВОЕ: Дублируем команды Веб-клиенту для отрисовки маркеров ---
+        # Формируем структуру, которую ждет armaDataFetcher.js
+        # t="llm_response", message=JSON-строка с полем "commands"
+        visualization_payload = {
+            "t": "llm_response",
+            "message": json.dumps({"commands": commands_to_send}, ensure_ascii=False)
+        }
+        await arma_connector.reports_queue.put(visualization_payload)
+        logger.info("Команды продублированы веб-клиенту для визуализации.")
+        # ------------------------------------------------------------------
+
     else:
         logger.warning("В ответе LLM не найдено команд для выполнения.")
 

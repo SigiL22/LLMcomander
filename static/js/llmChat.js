@@ -19,7 +19,7 @@
 
     // Заголовок
     const header = document.createElement('div');
-    header.innerText = "LLM Чат";
+    header.innerText = "LLM Чат (Советник)"; // Поменял заголовок для ясности
     header.style.padding = "5px";
     header.style.backgroundColor = "#f0f0f0";
     header.style.borderBottom = "1px solid #ccc";
@@ -44,7 +44,7 @@
     const input = document.createElement('input');
     input.type = "text";
     input.id = "llmInput";
-    input.placeholder = "Введите команду для LLM...";
+    input.placeholder = "Спросить совет (без приказов)..."; // Подсказка
     input.style.flex = "1";
     input.style.padding = "5px";
     input.style.border = "1px solid #ccc";
@@ -69,8 +69,10 @@
 
     // Сдвигаем карту вправо
     const mapDiv = document.getElementById('map');
-    mapDiv.style.width = "calc(100% - 320px)";
-    mapDiv.style.left = "320px";
+    if (mapDiv) {
+        mapDiv.style.width = "calc(100% - 320px)";
+        mapDiv.style.left = "320px";
+    }
   }
 
   // Добавление сообщения в окно
@@ -95,30 +97,34 @@
     addMessage(message, true); // Добавляем сообщение пользователя
     input.value = ""; // Очищаем поле ввода
 
-    const jsonInput = { "command": message }; // Формируем JSON
+    // --- ИЗМЕНЕНИЕ: Обертка сообщения для "Режима мыслей" ---
+    const wrappedMessage = `
+    USER QUERY: ${message}
+
+    INSTRUCTIONS FOR AI:
+    1. Respond to the user's query purely as an ADVISOR in the "reasoning" field.
+    2. Do NOT issue any tactical commands. 
+    3. The "commands" array MUST be empty: [].
+    `;
+    // ---------------------------------------------------------
+
+    const jsonInput = { "command": wrappedMessage }; 
+
     fetch('/llm_command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ json_input: jsonInput })
     })
     .then(response => {
-        // --- НАЧАЛО ИЗМЕНЕНИЙ ---
-        // Теперь мы не ждем здесь ответ для отображения.
-        // Просто проверяем, что запрос прошел без сетевых ошибок.
         if (!response.ok) {
-            // Если сервер вернул ошибку (4xx, 5xx), покажем ее
             return response.json().then(errData => {
                 throw new Error(errData.message || `HTTP error! status: ${response.status}`);
             });
         }
         return response.json();
-        // --- КОНЕЦ ИЗМЕНЕНИЙ ---
     })
     .then(data => {
-        // --- НАЧАЛО ИЗМЕНЕНИЙ ---
-        // Ответ LLM больше не приходит сюда. Просто логируем успех отправки.
-        console.log("Команда успешно отправлена на сервер:", data);
-        // --- КОНЕЦ ИЗМЕНЕНИЙ ---
+        console.log("Запрос совета успешно отправлен:", data);
     })
     .catch(err => {
       addMessage(`Ошибка отправки: ${err}`);

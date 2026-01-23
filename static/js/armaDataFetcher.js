@@ -24,7 +24,7 @@ function setupReportsStream() {
     const reportSource = new EventSource('/reports_stream');
     reportSource.onmessage = function(event) {
         const report = JSON.parse(event.data);
-        console.log("ТОЧКА 3: Получен объект report по SSE:", report);
+        //console.log("ТОЧКА 3: Получен объект report по SSE:", report);
 		
         if (report.command === "start_mission") {
             console.log("Получена команда start_mission. Очистка состояния клиента...");
@@ -39,72 +39,69 @@ function setupReportsStream() {
                 window.missionSettings.handleStartMission();
             }
 
-            // --- НОВОЕ: Парсим конфиг на клиенте, чтобы включить авто-захват ---
+            // Парсим конфиг на клиенте
             const configStr = report.config || "";
             if (configStr) {
                 const parts = configStr.split(',');
                 for (let part of parts) {
                     if (part.toLowerCase().includes('l-')) {
                         let sideRaw = part.split('-')[1].trim().toUpperCase();
-                        
-                        // Приводим к именам UI (OPFOR, BLUFOR, Independent)
                         if (sideRaw === 'EAST') sideRaw = 'OPFOR';
                         if (sideRaw === 'WEST') sideRaw = 'BLUFOR';
                         if (sideRaw === 'GUER' || sideRaw === 'RESISTANCE') sideRaw = 'Independent';
                         
-                        // Устанавливаем сторону в настройках клиента
                         if (window.missionSettings) {
                             window.missionSettings.llmSide = sideRaw;
-                            console.log("Клиент авто-настроен на сторону:", sideRaw);
-                            
-                            // Обновляем UI селекта, если он есть
+                            //console.log("Клиент авто-настроен на сторону:", sideRaw);
                             const sideSelect = document.getElementById("llmSide");
                             if (sideSelect) sideSelect.value = sideRaw;
                         }
                     }
                 }
             }
-            // ------------------------------------------------------------------
 
             window.unitLayer.updateReports([]);
         }
-        // --- НАЧАЛО ИЗМЕНЕНИЙ ---
-        // Обрабатываем все остальные сообщения
         else {
+            // 1. ЛОГИ (МЫСЛИ) - ЭТО ОСТАВЛЯЕМ В ЧАТЕ
             if (report.t === "llm_log" && window.llmChat) {
-                console.log("Обработка как llm_log");
                 window.llmChat.addMessage(`[СЕРВЕР]: ${report.message}`);
-            } else if (report.t === "llm_response" && window.llmChat) {
-                console.log("Обработка как llm_response");
+            } 
+            // 2. ОТВЕТ LLM (КОМАНДЫ) - ЭТО СКРЫВАЕМ ИЗ ЧАТА, ЕСЛИ ЭТО JSON С КОМАНДАМИ
+            else if (report.t === "llm_response" && window.llmChat) {
+                let isTechnicalData = false;
                 let responseText = report.message;
                 
-                // --- НОВОЕ: Передаем команды в UnitLayer ---
                 try {
                     const jsonObject = JSON.parse(responseText);
                     
-                    // Если в ответе есть массив commands, передаем его
+                    // Если это команды для карты
                     if (jsonObject.commands && Array.isArray(jsonObject.commands)) {
-                        console.log("[DataFetcher] Перехват команд LLM для отрисовки:", jsonObject.commands);
+                        //console.log("[DataFetcher] Команды LLM получены и переданы в UnitLayer.");
                         if (window.unitLayer && typeof window.unitLayer.processLLMCommands === 'function') {
                             window.unitLayer.processLLMCommands(jsonObject.commands);
                         }
+                        isTechnicalData = true; // Помечаем как технические данные
                     }
-                    // Или если это просто массив (старый формат)
                     else if (Array.isArray(jsonObject)) {
                          if (window.unitLayer && typeof window.unitLayer.processLLMCommands === 'function') {
                             window.unitLayer.processLLMCommands(jsonObject);
                         }
+                        isTechnicalData = true;
                     }
 
-                    responseText = JSON.stringify(jsonObject, null, 2);
                 } catch (e) {
-                    // Ошибка парсинга, игнорируем для визуализации
+                    // Если не JSON, значит просто текст - его можно показать
                 }
-                // -------------------------------------------
 
-                window.llmChat.addMessage(`[LLM]:\n${responseText}`);
+                // --- ИЗМЕНЕНИЕ: Если это технические данные (команды), НЕ пишем в чат ---
+                if (!isTechnicalData) {
+                    window.llmChat.addMessage(`[LLM]:\n${responseText}`);
+                }
+                // -----------------------------------------------------------------------
             }
-            // Добавляем в массив только обычные репорты, а не команду start_mission
+            
+            // Добавляем в массив репортов (для отображения иконок событий на карте)
             reports.push(report);
             window.unitLayer.updateReports(reports);
         }
