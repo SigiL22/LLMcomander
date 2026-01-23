@@ -295,6 +295,14 @@ async def trigger_llm_event_report(llm_client: LLMClient, report: dict):
         llm_payload["event_details"]["vehicle_name"] = report.get("vehicle_name")
         llm_payload["event_details"]["position"] = report.get("p")
         
+     # --- НОВОЕ: Обработка потери своей техники ---
+    elif report_type == "friendly_vehicle_lost":
+        detail["event"] = "friendly_unit_lost" # Ключ для LLM
+        detail["vehicle_name"] = r.get("vehicle_name")
+        detail["position"] = r.get("p")
+        detail["message"] = f"Our forces report the loss of a {r.get('vehicle_name')}."
+        # ---------------------------------------------
+        
     else:
         logger.error(f"Неподдерживаемый тип доклада для trigger_llm_event_report: {report_type}")
         return
