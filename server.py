@@ -93,31 +93,47 @@ llm_report_batch = []                   # Список для накоплени
 batch_lock = asyncio.Lock()             # Lock для безопасного доступа к списку
 batch_timer_task: asyncio.Task | None = None # Ссылка на задачу-таймер
 current_mission_snapshots = [] # Список путей к актуальным снимкам
+llm_is_busy = False # Флаг: идет ли сейчас общение с LLM
 
 def roll_call_loop():
-    global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client, roll_call_interval_seconds
+    # Добавляем llm_is_busy в global
+    global roll_call_running, llm_assigned_side, system_prompt_sent, llm_client, roll_call_interval_seconds, llm_is_busy
     logger.info("Поток 'переклички' для LLM запущен.")
 
     while roll_call_running:
         try:
-            # Ждем либо таймаута, либо события
-            # Это позволит нам мгновенно менять интервал
+            # Ждем интервал
             roll_call_event.wait(timeout=roll_call_interval_seconds)
-            roll_call_event.clear() # Сбрасываем событие после ожидания
+            roll_call_event.clear()
             
             if not roll_call_running: break
 
             if llm_assigned_side and system_prompt_sent and llm_client:
+                # --- ИЗМЕНЕНИЕ: Проверка занятости ---
+                if llm_is_busy:
+                    logger.info("Перекличка пропущена: LLM занята обработкой боевых докладов.")
+                    continue
+                # -------------------------------------
+
                 logger.info(f"Перекличка: запуск отчета для стороны {llm_assigned_side}")
-                run_async_from_sync(
-                    llm_tactical_controller.trigger_llm_report(
-                        llm_client,
-                        llm_assigned_side,
-                        context_text="Periodic roll call. Current status of your forces"
+                
+                # Ставим флаг занятости, чтобы боевые доклады подождали перекличку
+                llm_is_busy = True 
+                try:
+                    run_async_from_sync(
+                        llm_tactical_controller.trigger_llm_report(
+                            llm_client,
+                            llm_assigned_side,
+                            context_text="Periodic roll call. Current status of your forces"
+                        )
                     )
-                )
+                finally:
+                    # Обязательно снимаем флаг
+                    llm_is_busy = False
+
         except Exception as e:
             logger.error(f"Ошибка в цикле 'переклички': {e}")
+            llm_is_busy = False # На всякий случай сбрасываем при ошибке
             time.sleep(10)
 
     logger.info("Поток 'переклички' для LLM остановлен.")
@@ -284,36 +300,70 @@ async def batch_timer_coroutine():
     а затем вызывает обработчик пакета докладов.
     """
     global llm_report_batch_interval_seconds
-    logger.debug(f"Таймер запущен, ожидание {llm_report_batch_interval_seconds} сек...")
+    logger.info(f"Таймер запущен, ожидание {llm_report_batch_interval_seconds} сек...")
     await asyncio.sleep(llm_report_batch_interval_seconds)
     await process_and_send_llm_batch()
 
 # 2. ОБНОВЛЕННАЯ функция обработки пакета
+# 2. ПОЛНОСТЬЮ ОБНОВЛЕННАЯ функция обработки пакета
 async def process_and_send_llm_batch():
     """
-    Вызывается по таймеру. Собирает накопленные доклады,
-    отправляет их в контроллер и очищает пакет.
+    Вызывается по таймеру. 
+    1. Проверяет, не занята ли LLM.
+    2. Если свободна - забирает все доклады и отправляет.
+    3. Дожидается ответа.
+    4. Если за время ожидания пришли новые доклады - повторяет цикл СРАЗУ ЖЕ.
     """
-    global llm_report_batch, batch_timer_task, llm_client, llm_assigned_side
+    global llm_report_batch, batch_timer_task, llm_client, llm_assigned_side, llm_is_busy
     
-    async with batch_lock:
-        if not llm_report_batch:
-            batch_timer_task = None
-            logger.debug("Таймер сработал, но пакет пуст. Ничего не отправляем.")
-            return
-            
-        reports_to_process = llm_report_batch[:]
-        llm_report_batch.clear()
-        # Сбрасываем задачу-таймер, чтобы можно было запустить новую
-        batch_timer_task = None
-        logger.info(f"Таймер сработал. Обработка пакета из {len(reports_to_process)} докладов.")
+    # Если LLM уже занята обработкой предыдущего пакета, мы ничего не делаем.
+    # Тот процесс, который сейчас работает, сам заберет накопившиеся данные,
+    # когда освободится (см. цикл while True ниже).
+    if llm_is_busy:
+        logger.info("Таймер сработал, но LLM занята. Доклады копятся в очереди.")
+        return
 
-    if llm_client and llm_assigned_side:
-        await llm_tactical_controller.trigger_llm_batch_report(
-            llm_client,
-            llm_assigned_side,
-            reports_to_process
-        )
+    llm_is_busy = True
+
+    try:
+        # Запускаем цикл "вычерпывания" докладов
+        while True:
+            # 1. Забираем текущую пачку под замком
+            async with batch_lock:
+                if not llm_report_batch:
+                    # Если докладов нет - выходим из цикла обработки
+                    break
+                
+                reports_to_process = llm_report_batch[:]
+                llm_report_batch.clear()
+            
+            # 2. Отправляем в LLM (если клиент готов)
+            if llm_client and llm_assigned_side:
+                logger.info(f"Обработка пакета из {len(reports_to_process)} докладов. Отправка в LLM...")
+                
+                # Этот вызов теперь будет ждать, пока LLM не ответит (благодаря await)
+                await llm_tactical_controller.trigger_llm_batch_report(
+                    llm_client,
+                    llm_assigned_side,
+                    reports_to_process
+                )
+                logger.info("Ответ от LLM получен и обработан.")
+            else:
+                logger.info("LLM не готова, доклады пропущены.")
+                break # Прерываем цикл, если нет клиента
+
+            # После завершения итерации цикл while True пойдет на новый круг 
+            # и проверит, не появилось ли что-то в llm_report_batch за время ожидания.
+
+    except Exception as e:
+        logger.exception(f"Ошибка в цикле обработки пакетов LLM: {e}")
+    
+    finally:
+        # Снимаем флаг занятости
+        llm_is_busy = False
+        # Сбрасываем задачу таймера, чтобы stream мог запустить новый таймер при поступлении НОВЫХ данных
+        batch_timer_task = None
+        logger.info("Цикл обработки LLM завершен, режим ожидания.")
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
@@ -466,7 +516,7 @@ def reports_stream():
                             logger.info("Конфиг не найден или не содержит 'l-', ожидание ручного выбора стороны.")
 
                     log_msg_part = report.get('command', report.get('t', 'Unknown'))
-                    logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {log_msg_part}")
+                    # logger.info(f"ТОЧКА 2: Извлечено из очереди и отправляется клиенту: {log_msg_part}")
                     
                     report_type = report.get("t")
                     # Проверяем, что сторона совпадает (с учетом врага и своей стороны)
@@ -645,7 +695,6 @@ async def send_system_prompt(markers: list = None):
             json_str = json_str_raw
         
         full_combined_prompt = (
-            f"{sys_prompt_text}\n\n"       # СИСТЕМНАЯ ИНСТРУКЦИЯ
             f"--- MISSION CONTEXT ---\n"
             f"{context_header}\n\n"        # КОНТЕКСТ СТОРОН
             f"--- MISSION DATA JSON ---\n"
@@ -1133,7 +1182,7 @@ def llm_command():
                 "t": "llm_response",
                 "message": response  # response - это строка, которую вернул LLM
             }
-            logger.info(f"ТОЧКА 1: Попытка поместить в очередь: {llm_response_message}")
+            #logger.info(f"ТОЧКА 1: Попытка поместить в очередь: {llm_response_message}")
             # Помещаем ответ в очередь reports_queue для трансляции
             if arma_loop:
                 asyncio.run_coroutine_threadsafe(

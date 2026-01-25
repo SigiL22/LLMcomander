@@ -106,6 +106,7 @@ function setupReportsStream() {
             
             // Добавляем в массив репортов
             reports.push(report);
+			console.log(">>> [REPORTS] Текущий список репортов:", reports);
             window.unitLayer.updateReports(reports);
         }
     };
